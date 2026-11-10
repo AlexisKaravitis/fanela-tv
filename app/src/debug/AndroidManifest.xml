@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <receiver android:name=".DebugReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="app.fanela.tv.DEMO" />
+                <action android:name="app.fanela.tv.REFRESH" />
+                <action android:name="app.fanela.tv.AUDIT" />
+                <action android:name="app.fanela.tv.FOLLOW" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fanela: Greek clubs' fixtures, live scores and TV channels, for Android TV and Google TV.
+     No accounts, no ads, no analytics. Settings and cached fixtures stay on the device. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- TV only: this is a 10-foot app with D-pad navigation -->
+    <uses-feature android:name="android.software.leanback" android:required="true" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <!-- Fixtures and scores -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Tells "the TV is offline" apart from "a server is failing", so sources are not paused after a Wi-Fi drop -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- The optional home-screen rows (Android TV preview channels) -->
+    <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
+    <!-- Keeps the optional home-screen rows' 15-minute update job across restarts -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- In-app updates of the sideloaded APK (the user confirms every install) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- Apps Fanela can open for a match (Android 11+ package visibility), and the home screen app (row support) -->
+    <queries>
+        <package android:name="gr.cosmote.cosmotetv.androidtv" />
+        <package android:name="gr.sportfmtv.app" />
+        <package android:name="com.ug.eon.android.tv" />
+        <package android:name="gr.antenna.ant1.screen" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/banner"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/no_backup"
+        android:supportsRtl="false"
+        android:enableOnBackInvokedCallback="true"
+        android:theme="@style/Fanela">
+
+        <activity android:name=".HomeActivity" android:exported="true" android:launchMode="singleTask"
+            android:configChanges="keyboard|keyboardHidden|navigation" />
+
+        <!-- The tiles below open this first: it starts the main screen in a task of its own and closes, so switching
+             tiles (Brand) never closes the app. No window, no recents entry, a task apart from the app's. -->
+        <activity android:name=".LaunchActivity" android:exported="false" android:theme="@android:style/Theme.NoDisplay"
+            android:taskAffinity="" android:excludeFromRecents="true" android:noHistory="true" />
+
+        <!-- The app's tile on the TV, one per kit colour; Brand enables the one closest to the favourite club's kit.
+             .Launch is the original blue icon and banner. -->
+        <activity-alias android:name=".Launch" android:targetActivity=".LaunchActivity" android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Launch_red" android:targetActivity=".LaunchActivity" android:exported="true"
+            android:enabled="false" android:icon="@mipmap/ic_launcher_red" android:banner="@drawable/banner_red">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Launch_maroon" android:targetActivity=".LaunchActivity" android:exported="true"
+            android:enabled="false" android:icon="@mipmap/ic_launcher_maroon" android:banner="@drawable/banner_maroon">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Launch_orange" android:targetActivity=".LaunchActivity" android:exported="true"
+            android:enabled="false" android:icon="@mipmap/ic_launcher_orange" android:banner="@drawable/banner_orange">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Launch_yellow" android:targetActivity=".LaunchActivity" android:exported="true"
+            android:enabled="false" android:icon="@mipmap/ic_launcher_yellow" android:banner="@drawable/banner_yellow">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Launch_green" android:targetActivity=".LaunchActivity" android:exported="true"
+            android:enabled="false" android:icon="@mipmap/ic_launcher_green" android:banner="@drawable/banner_green">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Launch_sky" android:targetActivity=".LaunchActivity" android:exported="true"
+            android:enabled="false" android:icon="@mipmap/ic_launcher_sky" android:banner="@drawable/banner_sky">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Launch_navy" android:targetActivity=".LaunchActivity" android:exported="true"
+            android:enabled="false" android:icon="@mipmap/ic_launcher_navy" android:banner="@drawable/banner_navy">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Launch_purple" android:targetActivity=".LaunchActivity" android:exported="true"
+            android:enabled="false" android:icon="@mipmap/ic_launcher_purple" android:banner="@drawable/banner_purple">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Launch_black" android:targetActivity=".LaunchActivity" android:exported="true"
+            android:enabled="false" android:icon="@mipmap/ic_launcher_black" android:banner="@drawable/banner_black">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Launch_white" android:targetActivity=".LaunchActivity" android:exported="true"
+            android:enabled="false" android:icon="@mipmap/ic_launcher_white" android:banner="@drawable/banner_white">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity android:name=".SettingsActivity" android:exported="false"
+            android:configChanges="keyboard|keyboardHidden|navigation" />
+
+        <!-- Opened by the home screen when a row tile is selected -->
+        <activity android:name=".OpenActivity" android:exported="true" android:noHistory="true"
+            android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <receiver android:name=".InitReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.media.tv.action.INITIALIZE_PROGRAMS" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Read-only card images for the home-screen rows -->
+        <provider android:name=".ArtProvider" android:authorities="${applicationId}.art" android:exported="true" />
+
+        <receiver android:name=".AppUpdate$Result" android:exported="false" />
+
+        <service android:name=".UpdateJob" android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+    </application>
+</manifest>

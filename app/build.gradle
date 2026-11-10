@@ -1,0 +1,68 @@
+plugins { id 'com.android.application' }
+
+// Release signing: keystore.properties next to this file (never committed). Without it, release builds are unsigned.
+def ksFile = rootProject.file('keystore.properties')
+def ks = new Properties()
+if (ksFile.exists()) ksFile.withInputStream { ks.load(it) }
+
+android {
+    namespace 'app.fanela.tv'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'app.fanela.tv'
+        minSdk 26          // Android TV 8.0: first version with home-screen rows (preview channels)
+        targetSdk 36
+        versionCode 5
+        versionName '1.0.4'
+        resourceConfigurations += ['en', 'el']
+        // Club crests and exact channels from the TV guides (both can be switched off for a stricter build).
+        buildConfigField 'boolean', 'REMOTE_IMAGES', 'true'
+        buildConfigField 'boolean', 'GUIDES', 'true'
+        // GitHub "owner/repo" whose releases carry new APKs (in-app updates). Empty = no update checks.
+        buildConfigField 'String', 'UPDATE_REPO', '""'
+    }
+
+    buildFeatures { buildConfig true }
+
+    signingConfigs {
+        release {
+            if (ksFile.exists()) {
+                storeFile rootProject.file(ks['storeFile'])
+                storePassword ks['storePassword']
+                keyAlias ks['keyAlias']
+                keyPassword ks['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (ksFile.exists()) signingConfig signingConfigs.release
+        }
+        debug { applicationIdSuffix '.debug' }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError true
+        checkReleaseBuilds true
+        warningsAsErrors false
+        xmlReport true
+        htmlReport true
+    }
+
+    testOptions { unitTests.returnDefaultValues = true }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20250517'
+}

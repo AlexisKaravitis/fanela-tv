@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Channel logos are looked up by name (Channels / Net.image "res:" URLs): keep them in release builds. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/ch_*,@raw/channels,@raw/ofl_google_sans" />

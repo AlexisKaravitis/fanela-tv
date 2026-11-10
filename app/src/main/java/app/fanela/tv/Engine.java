@@ -1,0 +1,290 @@
+package app.fanela.tv;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/**
+ * Keeps the followed clubs' matches up to date.
+ *  refresh(): for every followed club that is due (15 min with a match within 48 h, hourly otherwise, 3 h with the
+ *             screen off), fixtures + guides -> one merge -> home-screen rows (when used). A settings change made
+ *             during a refresh is picked up by an immediate second pass.
+ *  tick():    live scores, called every 30 s by the app's home screen while it is visible and a match is on.
+ *             Never blocked by refresh(). Nothing polls in the background.
+ * Everything runs at background CPU priority.
+ */
+final class Engine {
+    private static final Object DRAW = new Object();
+    private static final AtomicBoolean refreshing = new AtomicBoolean(), again = new AtomicBoolean();
+    static volatile boolean stop;  // set when the system stops the job: finish the current club, then save and return
+
+    static void background() {
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
+    }
+
+    static boolean screenOn(Context c) {
+        android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
+        return pm == null || pm.isInteractive();
+    }
+
+    /** A refresh is running (Settings, the job or the home screen). */
+    static boolean busy() { return refreshing.get(); }
+
+    static boolean liveSource(Match m) { return "espn".equals(m.source) || "el".equals(m.source) || "ec".equals(m.source); }
+
+    /** Event id without the club, so a match between two followed clubs is one event. */
+    static String event(Match m) { return m.key.substring(m.key.indexOf('|') + 1); }
+
+    // ---------- full refresh ----------
+    static List<Match> refresh(Context c, boolean force) {
+        background();
+        Net.init(c);
+        I18n.load(c);
+        if (force) Net.reset();
+        if (!refreshing.compareAndSet(false, true)) {
+            again.set(true);  // the running refresh does one more pass with the new settings
+            return Store.load(c);
+        }
+        List<Match> all;
+        try {
+            stop = false;
+            boolean first = true;
+            do {  // a settings change during the pass, the drawing or the scheduling triggers one more round
+                again.set(false);
+                I18n.load(c);
+                pass(c, force && first);
+                first = false;
+                all = draw(c);
+            } while (again.get() && !stop);
+        } finally {
+            refreshing.set(false);
+        }
+        if (again.get() && !stop) return refresh(c, false);  // a request that arrived just as we released the lock
+        return all;
+    }
+
+    private static void pass(Context c, boolean force) {
+        long now = System.currentTimeMillis();
+        final Set<String> follow = Teams.followed(c);
+        boolean basket = Teams.basketball(c);
+        SharedPreferences sp = c.getSharedPreferences("engine", Context.MODE_PRIVATE);
+        SharedPreferences.Editor e0 = sp.edit();  // a club followed again later must be due at once
+        for (String key : sp.getAll().keySet())
+            if ((key.startsWith("lastFull_") || key.startsWith("sig_")) && !follow.contains(key.substring(key.indexOf('_') + 1))) e0.remove(key);
+        e0.apply();
+        Store.retain(c, follow);
+        if (follow.isEmpty()) return;  // nothing to download
+        List<Match> cached = Store.load(c);
+        boolean on = screenOn(c);
+
+        // which clubs are due, oldest first (a new follow or a basketball switch makes a club due at once)
+        final Map<String, Long> last = new HashMap<>();
+        List<String> due = new ArrayList<>();
+        for (String id : follow) {
+            String sig = basket + "";
+            boolean changed = !sig.equals(sp.getString("sig_" + id, null));
+            long l = sp.getLong("lastFull_" + id, 0);
+            long interval = !on ? 3 * 3600000L : busy(cached, id, now) ? 15 * 60000L : 60 * 60000L;
+            last.put(id, l);
+            if (force || changed || now - l >= interval - 60000L) due.add(id);
+        }
+        if (due.isEmpty()) return;
+        Collections.sort(due, new Comparator<String>() { public int compare(String a, String b) { return Long.compare(last.get(a), last.get(b)); } });
+
+        Teams.refresh(c);
+        Channels.refresh(c);
+        Channels.load(c);
+        List<Guide.Airing> s24 = Guide.sport24(c);
+        List<Teams.Club> clubs = new ArrayList<>();
+        List<List<Sources.Result>> results = new ArrayList<>();
+        List<List<Guide.Airing>> mags = new ArrayList<>(), sofas = new ArrayList<>();
+        List<List<Match>> founds = new ArrayList<>();
+        for (String id : due) {  // network, outside every lock
+            if (stop) break;
+            Teams.Club k = Teams.get(c, id);
+            if (k == null) continue;
+            try {
+                if (basket) { Teams.resolveEuro(c, k); Teams.lookupBasket(c, k); k = Teams.get(c, id); if (k == null) continue; }
+                List<Sources.Result> rs = Sources.fetch(c, k, basket);
+                List<Match> known = new ArrayList<>(cached);
+                for (Sources.Result r : rs) known.addAll(r.list);
+                List<Guide.Airing> mag = Guide.magenta(c, k, known);
+                List<Guide.Airing> sofa = Sofa.airings(c, k, known, basket);
+                List<Match> found = s24.isEmpty() ? null : Guide.discover(known, s24, k, basket);
+                clubs.add(k); results.add(rs); mags.add(mag); sofas.add(sofa); founds.add(found);
+            } catch (Throwable ignored) { }  // one club's failure never stops the others
+        }
+        SharedPreferences.Editor st = c.getSharedPreferences("store", Context.MODE_PRIVATE).edit();
+        synchronized (Store.class) {  // one load, one save
+            List<Match> all = Store.load(c);
+            for (int i = 0; i < clubs.size(); i++) {
+                Teams.Club k = clubs.get(i);
+                try {
+                    all = Store.mergeInto(all, k.id, results.get(i), founds.get(i), st);
+                    Guide.apply(all, k, mags.get(i), s24, sofas.get(i));
+                    if (!basket || !k.hasBasket) {
+                        List<Match> keep = new ArrayList<>();
+                        for (Match m : all) if (!(k.id.equals(m.club) && "BC".equals(m.team))) keep.add(m);
+                        all = keep;
+                    }
+                } catch (Throwable ignored) { }
+            }
+            shareCrests(all);
+            Crests.fill(c, all);
+            Store.save(c, all);
+        }
+        if (Crests.resolve(c, Store.load(c))) {  // crests the feeds did not give, looked up by name (a few per pass)
+            synchronized (Store.class) { List<Match> all = Store.load(c); Crests.fill(c, all); Store.save(c, all); }
+        }
+        st.commit();
+        SharedPreferences.Editor ed = sp.edit();
+        for (int i = 0; i < clubs.size(); i++) {  // only clubs whose feeds answered (offline: retry on the next job)
+            boolean ok = false;
+            for (Sources.Result r : results.get(i)) ok |= r.ok;
+            if (ok) ed.putLong("lastFull_" + clubs.get(i).id, now).putString("sig_" + clubs.get(i).id, basket + "");
+        }
+        if (sp.getLong("cleaned", 0) < now - 7 * 86400000L) { Net.cleanImages(c); ed.putLong("cleaned", now); }
+        ed.apply();
+        prefetchImages(c, Store.load(c), follow);
+    }
+
+    static boolean busy(List<Match> all, String club, long now) {
+        for (Match m : all)
+            if (club.equals(m.club) && ("pre".equals(m.state) || "in".equals(m.state) || "off".equals(m.state))
+                && m.start > now - 6 * 3600000L && m.start < now + 48 * 3600000L)
+                return true;
+        return false;
+    }
+
+    // ---------- live scores (only while the app is on screen) ----------
+    /** True when a followed match is in its live window (the caller keeps polling). */
+    static boolean live(Context c) {
+        long now = System.currentTimeMillis();
+        for (Match m : Store.load(c)) if (inWindow(m, now)) return true;
+        return false;
+    }
+
+    static boolean tick(Context c) {
+        background();
+        I18n.load(c);
+        long now = System.currentTimeMillis();
+        List<Match> window = new ArrayList<>();
+        for (Match m : Store.load(c)) if (inWindow(m, now)) window.add(m);
+        if (window.isEmpty()) return false;
+        if (!screenOn(c)) return true;
+        Map<String, Match> fetched = new HashMap<>();  // one request per event, even when two followed clubs meet
+        List<Match> updates = new ArrayList<>();
+        for (Match m : window) {
+            if (now < m.start - 5 * 60000L || !liveSource(m)) continue;
+            String ev = event(m);
+            Match n;
+            if (fetched.containsKey(ev)) n = fetched.get(ev);
+            else {
+                n = "espn".equals(m.source) ? Sources.espnLive(m) : Sources.euroLive(m);
+                fetched.put(ev, n);
+            }
+            if (n == null) continue;
+            Match u = n.copy();
+            if (!m.club.equals(u.club)) u.clubIsHome = !u.clubIsHome;  // the other club's point of view
+            if (u.clubWon != 9 && !m.club.equals(n.club)) u.clubWon = -u.clubWon;
+            u.channel = m.channel; u.channelNo = m.channelNo; u.channelLogo = m.channelLogo; u.channelApp = m.channelApp;
+            u.channelSure = m.channelSure; u.channelKnown = m.channelKnown; u.source = m.source; u.key = m.key; u.club = m.club;
+            if ("in".equals(u.state)) u.seenLiveAt = now;
+            updates.add(u);
+        }
+        if (!updates.isEmpty()) {
+            synchronized (Store.class) {
+                List<Match> all = Store.load(c);
+                boolean changed = false;
+                for (Match u : updates)
+                    for (int i = 0; i < all.size(); i++)
+                        if (all.get(i).key.equals(u.key)) {
+                            // only the live fields: channel, time and names may have been updated by a refresh meanwhile
+                            Match cur = all.get(i), x = cur.copy();
+                            x.state = u.state; x.hs = u.hs; x.as = u.as; x.detail = u.detail; x.quarter = u.quarter;
+                            x.clubWon = u.clubWon; x.pens = u.pens; x.seenLiveAt = Math.max(cur.seenLiveAt, u.seenLiveAt);
+                            if ("espn".equals(cur.source) && !u.tbd) { x.start = u.start; x.tbd = false; }  // never a placeholder over a known time
+                            all.set(i, Store.keepProgress(cur, x, now));
+                            changed = true;
+                        }
+                if (changed) Store.save(c, all);
+            }
+        }
+        draw(c);
+        return true;
+    }
+
+    static boolean inWindow(Match m, long now) {
+        if (m.tbd || "off".equals(m.state) || "post".equals(m.state)) return false;
+        if (now < m.start - 20 * 60000L) return false;
+        if (!liveSource(m)) return now < m.start + 135 * 60000L;
+        if ("in".equals(m.state)) return now < m.start + 5 * 3600000L;
+        return now < m.start + 3 * 3600000L + 15 * 60000L;
+    }
+
+    /** Clock-based states for games without a live feed, and live states the feed never closed. */
+    static void timeStates(List<Match> all, long now) {
+        for (Match m : all) {
+            if ("SUSPENDED".equals(m.detail)) {  // stays suspended until a feed reports a result or a new date
+                if (now > m.start + 5 * 3600000L) m.state = "off";  // no longer "now": shown like a postponement, then dropped
+                continue;
+            }
+            if (!liveSource(m) && !m.tbd && ("pre".equals(m.state) || "in".equals(m.state))) {
+                if (now >= m.start + 6 * 3600000L) { m.state = "post"; if (!"tsdb".equals(m.source) || !m.hasScore()) { m.hs = null; m.as = null; } m.detail = "FT"; }
+                else if (now >= m.start + 135 * 60000L) { m.state = "in"; m.detail = "AWAITING"; }
+                else if (now >= m.start && !m.hasScore()) { m.state = "in"; m.detail = "IN_PROGRESS"; }
+            }
+            if (liveSource(m) && "in".equals(m.state) && now > m.start + 5 * 3600000L && now - m.seenLiveAt > 30 * 60000L) {
+                m.state = "post";
+                if (m.clubWon == 9 && m.hasScore()) m.clubWon = Integer.compare(Match.toInt(m.clubScore()), Match.toInt(m.oppScore()));
+            }
+        }
+    }
+
+    // ---------- home-screen rows ----------
+    static List<Match> draw(Context c) {
+        synchronized (DRAW) {
+            I18n.load(c);
+            List<Match> all = Store.load(c);
+            timeStates(all, System.currentTimeMillis());
+            try {
+                if (HomeRows.enabled(c)) Cards.publishAll(c, all);
+                else HomeRows.removeUnfollowed(c);  // rows switched off: every club row is hidden, then deleted
+            } catch (Throwable ignored) { }
+            return all;
+        }
+    }
+
+    static void prefetchImages(Context c, List<Match> all, Set<String> follow) {
+        long now = System.currentTimeMillis();
+        Set<String> done = new HashSet<>();
+        for (Match m : all) {
+            if (m.start < now - 30L * 86400000L || m.start > now + 30L * 86400000L) continue;
+            for (String u : new String[]{m.homeCrest, m.awayCrest}) if (u != null && done.add(u)) Net.fetchImage(c, u);
+            if (m.start > now - 6 * 3600000L)  // channel logos of upcoming matches
+                for (Channels.Logo l : Channels.logos(c, m)) if (done.add(l.url)) Net.fetchImage(c, l.url);
+        }
+        for (String id : follow) { Teams.Club k = Teams.get(c, id); if (k != null) Net.fetchImage(c, k.crest); }
+    }
+
+    static void shareCrests(List<Match> all) {
+        Map<String, String> crest = new HashMap<>();
+        for (Match m : all) {
+            if (m.homeCrest != null && !m.homeCrest.isEmpty()) crest.put(m.team + Cards.key(I18n.grName(m.home)), m.homeCrest);
+            if (m.awayCrest != null && !m.awayCrest.isEmpty()) crest.put(m.team + Cards.key(I18n.grName(m.away)), m.awayCrest);
+        }
+        for (Match m : all) {
+            if (m.homeCrest == null || m.homeCrest.isEmpty()) m.homeCrest = crest.get(m.team + Cards.key(I18n.grName(m.home)));
+            if (m.awayCrest == null || m.awayCrest.isEmpty()) m.awayCrest = crest.get(m.team + Cards.key(I18n.grName(m.away)));
+        }
+    }
+
+}

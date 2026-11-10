@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Deliberate choices; everything else stays an error or warning. -->
+<lint>
+    <!-- commit() is used where another thread reads the value right after (follow list, job state, row ids). -->
+    <issue id="ApplySharedPref" severity="ignore" />
+    <!-- The TV home screen must read the card images; the provider serves only our card PNGs, read-only. -->
+    <issue id="ExportedContentProvider" severity="ignore" />
+    <!-- Android TV requires API 34+; 36 is tested. Raise when a new Play deadline comes. -->
+    <issue id="OldTargetApi" severity="ignore" />
+    <issue id="GradleDependency" severity="ignore" />
+    <issue id="NewerVersionAvailable" severity="ignore" />
+    <!-- TV banners and launcher art are only needed at xhdpi; mipmaps cover every density. -->
+    <issue id="IconMissingDensityFolder" severity="ignore" />
+</lint>
