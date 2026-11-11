@@ -84,30 +84,28 @@ final class Channels {
     private static Logo family(String n) {
         java.util.regex.Matcher fm = java.util.regex.Pattern.compile("(ΣΠΟΡ|SPORT)FMTV([0-9]?)").matcher(n);
         if (fm.matches()) return new Logo("res:ch_sportfm", fm.group(2).isEmpty() ? 0 : Integer.parseInt(fm.group(2)));
-        if (n.equals("MAGENTASPORT")) return new Logo("res:ch_magenta_sport", 0);
-        if (n.equals("NOVASPORTS")) return new Logo("res:ch_novasports", 0);
+        if (n.equals("MAGENTASPORT") || n.equals("COSMOTESPORT")) return new Logo("res:ch_magenta_sport", 0);  // the old name of the same channels
+        if (n.equals("NOVASPORTS") || n.equals("NOVA")) return new Logo("res:ch_novasports", 0);  // a season table names the network
         return null;
     }
 
-    /** Up to two logos for where the match is on (empty when the channel is not known). */
+    /**
+     * One entry per channel of the match (at most three), in its order: the logo URL when Fanela has one (a listing's
+     * own, a network's bundled logo, the MagentaTV line-up for the Greek sources), else null; and the channel number
+     * when it is known, else 0. A guess never shows a line-up number. Empty when the channel is not known.
+     */
     static List<Logo> logos(Context c, Match m) {
         List<Logo> out = new ArrayList<>();
         if (!m.channelKnown || m.channel == null || m.channel.trim().isEmpty()) return out;
-        String[] parts = m.channel.split("\\s*·\\s*");
-        if (Where.plain(m)) {  // outside the Greek sources: logos only when the listing gave one for every channel
-            String[] urls = m.channelLogo == null ? new String[0] : m.channelLogo.split("\\s*·\\s*");
-            if (urls.length != parts.length || parts.length > 3) return out;
-            for (String u : urls) { if (!u.startsWith("https://")) return new ArrayList<>(); out.add(new Logo(u, 0)); }
-            return out;
-        }
-        Map<String, Logo> cat = catalog(c);
-        for (int i = 0; i < parts.length && out.size() < 2; i++) {
-            if (i == 0 && m.channelSure && m.channelLogo != null && !m.channelLogo.isEmpty()) { out.add(new Logo(m.channelLogo, m.channelNo)); continue; }
+        String[] parts = m.channel.split("\\s*·\\s*"), urls = m.channelLogo == null ? new String[0] : m.channelLogo.split("\\s*·\\s*");
+        Map<String, Logo> cat = Where.plain(m) ? null : catalog(c);  // the line-up names only what the Greek sources name
+        for (int i = 0; i < parts.length && out.size() < 3; i++) {
+            if (parts[i].trim().isEmpty()) continue;
             String n = norm(parts[i]);
-            Logo f = family(n), k = cat.get(n);
-            Logo l = f != null ? f : k;
-            if (l == null) return new ArrayList<>();  // one unknown name: show the text instead of half the logos
-            out.add(m.channelSure || f != null ? l : new Logo(l.url, 0));  // a guess never shows a channel number
+            Logo f = family(n), k = cat == null ? null : cat.get(n);
+            String url = i < urls.length && urls[i].startsWith("https://") ? urls[i] : f != null ? f.url : k != null ? k.url : null;
+            int no = i == 0 && m.channelSure && m.channelNo > 0 ? m.channelNo : f != null ? f.no : m.channelSure && k != null ? k.no : 0;
+            out.add(new Logo(url, no));
         }
         return out;
     }

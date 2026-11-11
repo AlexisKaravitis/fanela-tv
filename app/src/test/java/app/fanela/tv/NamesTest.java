@@ -31,6 +31,17 @@ public class NamesTest {
         return new JSONObject(new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8)).getJSONObject("leagues");
     }
 
+    /** TheSportsDB's spelling of Basket League clubs reads like every other source's. */
+    @Test public void sportsDbBasketNames() {
+        I18n.use("en");
+        assertEquals("Karditsa", I18n.shortTeam("ASK Karditsas BC"));
+        assertEquals("Vikos Falcons", I18n.shortTeam("Vikos Falcons BC"));
+        I18n.use("el");
+        assertEquals("Καρδίτσα", I18n.shortTeam("ASK Karditsas BC"));
+        assertEquals("Βίκος", I18n.shortTeam("Vikos Falcons BC"));
+        assertEquals("ΠΑΟΚ", I18n.shortTeam("PAOK BC"));
+    }
+
     @Test public void noGridMixesAlphabets() throws Exception {
         JSONObject l = leagues();
         List<String> problems = new ArrayList<>();

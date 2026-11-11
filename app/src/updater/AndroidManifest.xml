@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Release builds with UPDATE_REPO set (build.gradle): in-app updates of the sideloaded APK. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The user confirms every install -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <application>
+        <receiver android:name=".AppUpdate$Result" android:exported="false" />
+    </application>
+</manifest>

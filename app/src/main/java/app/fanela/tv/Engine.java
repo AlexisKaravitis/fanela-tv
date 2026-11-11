@@ -14,17 +14,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Keeps the followed clubs' matches up to date.
- *  refresh(): for every followed club that is due (15 min with a match within 48 h, hourly otherwise, 3 h with the
- *             screen off), fixtures + where-to-watch for the viewer's country (Where) -> one merge -> home-screen rows
- *             (when used). A settings change made during a refresh is picked up by an immediate second pass.
- *  tick():    live scores, called every 30 s by the app's home screen while it is visible and a match is on.
- *             Never blocked by refresh(). Nothing polls in the background.
+ *  refresh(): for every followed club that is due (15 min from about 6 h before a match until just after it, hourly
+ *             otherwise, 3 h with the screen off), fixtures + where-to-watch for the viewer's country (Where) -> one
+ *             merge -> home-screen rows (when used). A settings change made during a refresh is picked up by an
+ *             immediate second pass.
+ *  tick():    live scores, called every 30 s by the app's home screen while it is visible and a match with a live
+ *             feed is on. Never blocked by refresh(). Nothing polls in the background.
  * Everything runs at background CPU priority.
  */
 final class Engine {
     private static final Object DRAW = new Object();
     private static final AtomicBoolean refreshing = new AtomicBoolean(), again = new AtomicBoolean();
-    static volatile boolean stop;  // set when the system stops the job: finish the current club, then save and return
+
+    /** Set when the system stops the job that started a refresh: finish the current club, then save and return. */
+    static final class Stop { volatile boolean set; }
 
     static void background() {
         android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
@@ -46,7 +49,9 @@ final class Engine {
     static String event(Match m) { return m.key.substring(m.key.indexOf('|') + 1); }
 
     // ---------- full refresh ----------
-    static List<Match> refresh(Context c, boolean force) {
+    static List<Match> refresh(Context c, boolean force) { return refresh(c, force, new Stop()); }
+
+    static List<Match> refresh(Context c, boolean force, Stop stop) {
         background();
         Net.init(c);
         I18n.load(c);
@@ -58,35 +63,48 @@ final class Engine {
         }
         List<Match> all;
         try {
-            stop = false;
             boolean first = true;
             do {  // a settings change during the pass, the drawing or the scheduling triggers one more round
                 again.set(false);
                 I18n.load(c);
                 Where.load(c);
-                pass(c, force && first);
+                boolean due = pass(c, force && first, stop);
                 first = false;
-                all = draw(c);
-            } while (again.get() && !stop);
+                // nothing to draw for: the job was stopped, or nothing was due while nobody is watching
+                all = stop.set || (!due && !screenOn(c)) ? stored(c) : draw(c);
+            } while (again.get() && !stop.set);
         } finally {
             refreshing.set(false);
         }
-        if (again.get() && !stop) return refresh(c, false);  // a request that arrived just as we released the lock
+        if (again.get() && !stop.set) return refresh(c, false, stop);  // a request that arrived just as we released the lock
         return all;
     }
 
-    private static void pass(Context c, boolean force) {
+    /** The stored matches with their clock-based states, as draw() returns them, without drawing. */
+    private static List<Match> stored(Context c) {
+        List<Match> all = Store.load(c);
+        timeStates(all, System.currentTimeMillis());
+        return all;
+    }
+
+    /** One round of downloads. True when at least one club was due. */
+    private static boolean pass(Context c, boolean force, Stop stop) {
         long now = System.currentTimeMillis();
         final Set<String> follow = Teams.followed(c);
         boolean basket = Teams.basketball(c);
         String country = Where.country();
         SharedPreferences sp = c.getSharedPreferences("engine", Context.MODE_PRIVATE);
         SharedPreferences.Editor e0 = sp.edit();  // a club followed again later must be due at once
-        for (String key : sp.getAll().keySet())
-            if ((key.startsWith("lastFull_") || key.startsWith("sig_")) && !follow.contains(key.substring(key.indexOf('_') + 1))) e0.remove(key);
+        Set<String> gone = new HashSet<>();
+        for (String key : sp.getAll().keySet()) {
+            boolean ours = key.startsWith("lastFull_") || key.startsWith("sig_") || key.startsWith("res_");
+            String id = key.substring(key.indexOf('_') + 1);
+            if (ours && !follow.contains(id)) { e0.remove(key); gone.add(id); }
+        }
         e0.apply();
+        for (String id : gone) Store.forgetClub(c, id);  // its card files, guide caches and timestamps, with or without rows
         Store.retain(c, follow);
-        if (follow.isEmpty()) return;  // nothing to download
+        if (follow.isEmpty()) return false;  // nothing to download
         List<Match> cached = Store.load(c);
         boolean on = screenOn(c);
 
@@ -99,11 +117,11 @@ final class Engine {
             boolean changed = !sig.equals(sp.getString("sig_" + id, null));
             if (changed) resign.add(id);
             long l = sp.getLong("lastFull_" + id, 0);
-            long interval = !on ? 3 * 3600000L : busy(cached, id, now) ? 15 * 60000L : 60 * 60000L;
+            long interval = !on ? 3 * 3600000L : soon(cached, id, now) ? 15 * 60000L : 60 * 60000L;
             last.put(id, l);
             if (force || changed || now - l >= interval - 60000L) due.add(id);
         }
-        if (due.isEmpty()) return;
+        if (due.isEmpty()) return false;
         Collections.sort(due, new Comparator<String>() { public int compare(String a, String b) { return Long.compare(last.get(a), last.get(b)); } });
 
         Teams.refresh(c);
@@ -115,12 +133,13 @@ final class Engine {
         List<List<Object>> listings = new ArrayList<>();
         List<List<Match>> founds = new ArrayList<>();
         for (String id : due) {  // network, outside every lock
-            if (stop) break;
+            if (stop.set) break;
             Teams.Club k = Teams.get(c, id);
             if (k == null) continue;
             try {
                 if (basket) { Teams.resolveEuro(c, k); Teams.lookupBasket(c, k); k = Teams.get(c, id); if (k == null) continue; }
-                List<Sources.Result> rs = Sources.fetch(c, k, basket);
+                boolean askResults = force || resign.contains(id) || resultsDue(cached, id, sp.getLong("res_" + id, 0), now);
+                List<Sources.Result> rs = Sources.fetch(c, k, basket, cached, askResults);
                 List<Match> known = new ArrayList<>(cached);
                 for (Sources.Result r : rs) known.addAll(r.list);
                 List<Object> ls = new ArrayList<>();
@@ -156,49 +175,98 @@ final class Engine {
             Crests.fill(c, all);
             Store.save(c, all);
         }
-        if (Crests.resolve(c, Store.load(c))) {  // crests the feeds did not give, looked up by name (a few per pass)
+        if (!stop.set && Crests.resolve(c, Store.load(c))) {  // crests the feeds did not give, looked up by name (a few per pass)
             synchronized (Store.class) { List<Match> all = Store.load(c); Crests.fill(c, all); Store.save(c, all); }
         }
         st.commit();
         SharedPreferences.Editor ed = sp.edit();
         for (int i = 0; i < clubs.size(); i++) {  // only clubs whose feeds answered (offline: retry on the next job)
             boolean ok = false;
-            for (Sources.Result r : results.get(i)) ok |= r.ok;
+            boolean res = false;
+            for (Sources.Result r : results.get(i)) { ok |= r.ok; res |= r.results; }
             if (ok) ed.putLong("lastFull_" + clubs.get(i).id, now).putString("sig_" + clubs.get(i).id, sig(basket, country));
+            if (res) ed.putLong("res_" + clubs.get(i).id, now);
         }
         if (sp.getLong("cleaned", 0) < now - 7 * 86400000L) { Net.cleanImages(c); ed.putLong("cleaned", now); }
         ed.apply();
-        prefetchImages(c, Store.load(c), follow);
+        if (!stop.set) prefetchImages(c, Store.load(c), follow);
+        return true;
     }
 
     /** What a club's last fetch depended on: a change makes it due at once (Greece keeps the old value). */
     static String sig(boolean basket, String country) { return Where.greek(country) ? basket + "" : basket + ":" + country; }
 
-    static boolean busy(List<Match> all, String club, long now) {
+    /**
+     * The club's 15-minute tier: a match within about 6 h (kick-off soon, being played, or put off), or one that ended
+     * a moment ago (its result and the next fixtures settle then). Otherwise hourly.
+     */
+    static boolean soon(List<Match> all, String club, long now) {
+        for (Match m : all) {
+            if (!club.equals(m.club)) continue;
+            boolean open = "pre".equals(m.state) || "in".equals(m.state) || "off".equals(m.state);
+            if (open && m.start > now - 6 * 3600000L && m.start < now + 6 * 3600000L) return true;
+            if ("post".equals(m.state) && m.start > now - 4 * 3600000L) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Whether ESPN's football results are worth asking for: every 6 h, and from about 100 minutes after a kick-off
+     * until one fetch has been made 3 h after it (extra time and penalties included). Sources.espn also asks when a
+     * match it listed as coming or being played has dropped off the fixtures list.
+     */
+    static boolean resultsDue(List<Match> all, String club, long lastResults, long now) {
+        if (now - lastResults >= 6 * 3600000L) return true;
         for (Match m : all)
-            if (club.equals(m.club) && ("pre".equals(m.state) || "in".equals(m.state) || "off".equals(m.state))
-                && m.start > now - 6 * 3600000L && m.start < now + 48 * 3600000L)
+            if (club.equals(m.club) && "espn".equals(m.source) && !m.tbd && !"off".equals(m.state) && m.start <= now
+                && m.start > lastResults - 3 * 3600000L && (now >= m.start + 100 * 60000L || "post".equals(m.state)))
                 return true;
         return false;
     }
 
     // ---------- live scores (only while the app is on screen) ----------
-    /** True when a followed match is in its live window (the caller keeps polling). */
+    /**
+     * True when a followed match with a live feed is in its live window (the caller keeps polling). Games without one
+     * change by the clock only: the caller wakes at nextChange() instead.
+     */
     static boolean live(Context c) {
         long now = System.currentTimeMillis();
-        for (Match m : Store.load(c)) if (inWindow(m, now)) return true;
+        for (Match m : Store.load(c)) if (liveSource(m) && inWindow(m, now)) return true;
         return false;
+    }
+
+    /**
+     * The next time a match changes by the clock alone: a live window opening, a game without a live feed starting,
+     * waiting for its result or ending (timeStates), a suspension or an unclosed live game running out. MAX_VALUE: none.
+     */
+    static long nextChange(List<Match> all, long now) {
+        long next = Long.MAX_VALUE;
+        for (Match m : all) {
+            if (m.tbd || !("pre".equals(m.state) || "in".equals(m.state))) continue;
+            long[] at = "SUSPENDED".equals(m.detail) ? new long[]{m.start + 5 * 3600000L}
+                : liveSource(m) ? new long[]{m.start - 20 * 60000L, m.start + 5 * 3600000L}
+                : new long[]{m.start - 20 * 60000L, m.start, m.start + 135 * 60000L, m.start + 6 * 3600000L};
+            for (long t : at) if (t > now && t < next) next = t;
+        }
+        return next;
+    }
+
+    /** A live update worth saving: the card changes, or the time it was last seen live moved on by 5 minutes. */
+    static boolean worthSaving(Match cur, Match next) {
+        return !next.signature().equals(cur.signature()) || next.seenLiveAt - cur.seenLiveAt >= 5 * 60000L;
     }
 
     static boolean tick(Context c) {
         background();
         I18n.load(c);
+        Where.load(c);
         long now = System.currentTimeMillis();
         List<Match> window = new ArrayList<>();
         for (Match m : Store.load(c)) if (inWindow(m, now)) window.add(m);
         if (window.isEmpty()) return false;
         if (!screenOn(c)) return true;
         Map<String, Match> fetched = new HashMap<>();  // one request per event, even when two followed clubs meet
+        Map<String, String> boards = new HashMap<>();  // one request per scoreboard: three clubs at 15:00 share it
         List<Match> updates = new ArrayList<>();
         for (Match m : window) {
             if (now < m.start - 5 * 60000L || !liveSource(m)) continue;
@@ -206,7 +274,7 @@ final class Engine {
             Match n;
             if (fetched.containsKey(ev)) n = fetched.get(ev);
             else {
-                n = "espn".equals(m.source) ? Sources.espnLive(m) : "nba".equals(m.source) ? Sources.nbaLive(m) : Sources.euroLive(m);
+                n = "espn".equals(m.source) ? Sources.espnLive(m, boards) : "nba".equals(m.source) ? Sources.nbaLive(m, boards) : Sources.euroLive(m);
                 fetched.put(ev, n);
             }
             if (n == null) continue;
@@ -219,10 +287,10 @@ final class Engine {
             if ("in".equals(u.state)) u.seenLiveAt = now;
             updates.add(u);
         }
+        boolean changed = false;
         if (!updates.isEmpty()) {
             synchronized (Store.class) {
                 List<Match> all = Store.load(c);
-                boolean changed = false;
                 for (Match u : updates)
                     for (int i = 0; i < all.size(); i++)
                         if (all.get(i).key.equals(u.key)) {
@@ -231,13 +299,13 @@ final class Engine {
                             x.state = u.state; x.hs = u.hs; x.as = u.as; x.detail = u.detail; x.quarter = u.quarter;
                             x.clubWon = u.clubWon; x.pens = u.pens; x.seenLiveAt = Math.max(cur.seenLiveAt, u.seenLiveAt);
                             if ("espn".equals(cur.source) && !u.tbd) { x.start = u.start; x.tbd = false; }  // never a placeholder over a known time
-                            all.set(i, Store.keepProgress(cur, x, now));
-                            changed = true;
+                            Match next = Store.keepProgress(cur, x, now);
+                            if (worthSaving(cur, next)) { all.set(i, next); changed = true; }  // the same card: no write, no redraw
                         }
                 if (changed) Store.save(c, all);
             }
         }
-        draw(c);
+        if (changed) draw(c);
         return true;
     }
 
@@ -272,6 +340,7 @@ final class Engine {
     static List<Match> draw(Context c) {
         synchronized (DRAW) {
             I18n.load(c);
+            Where.load(c);
             List<Match> all = Store.load(c);
             timeStates(all, System.currentTimeMillis());
             try {

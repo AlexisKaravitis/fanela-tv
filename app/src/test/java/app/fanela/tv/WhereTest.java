@@ -79,7 +79,7 @@ public class WhereTest {
         assertEquals("the rights table wins over the season table in Greece", "Magenta Sport · MEGA", ucl.channel);
         assertFalse(Where.plain(ucl));
         I18n.use("en");
-        assertEquals("Likely: Magenta Sport · Magenta TV", Cards.where(m, true));
+        assertEquals("Likely Magenta Sport · on Magenta TV", Cards.where(m, true));
     }
 
     @Test public void greekViewerFollowingAnEnglishClub() {
@@ -102,10 +102,10 @@ public class WhereTest {
         assertNull("no app to open outside Greece", m.channelApp);
         assertEquals(Arrays.asList("Sky Sports", "TNT Sports"), Cards.names(m));
         I18n.use("en");
-        assertEquals("Usually on Sky Sports / TNT Sports", Cards.where(m, true));
-        assertEquals("usually on Sky Sports / TNT Sports", Cards.where(m, false));
+        assertEquals("Likely on Sky Sports or TNT Sports", Cards.where(m, true));
+        assertEquals("likely on Sky Sports or TNT Sports", Cards.where(m, false));
         I18n.use("el");
-        assertEquals("Συνήθως: Sky Sports / TNT Sports", Cards.where(m, true));
+        assertEquals("Πιθανό στο Sky Sports ή TNT Sports", Cards.where(m, true));
     }
 
     @Test public void noDataSaysCheckYourGuide() {

@@ -38,6 +38,8 @@ final class Teams {
         boolean hasBasket;
         String rowKey() { return "club_" + id; }
         String label() { return I18n.el() ? gr : name; }
+        /** The row heading: the name, and the sport for a basketball-only EuroLeague / EuroCup club ("Real Madrid · Basketball"). */
+        String heading() { return euroOnly() ? label() + " · " + I18n.t("basketball_group") : label(); }
         boolean nba() { return id.startsWith("nba"); }
         boolean euroOnly() { return id.startsWith("el"); }
         boolean basketOnly() { return nba() || euroOnly(); }
@@ -89,8 +91,30 @@ final class Teams {
     private static volatile List<Club> cache;
     private static volatile long cacheAt;
 
-    /** The Super League clubs and every followed club. */
-    static List<Club> all(Context c) { return withFollowed(c, greek(c), null); }
+    /**
+     * The Super League clubs and every followed club. Built once per follow list (and Super League list): Settings asks
+     * for clubs by id many times per press.
+     */
+    static List<Club> all(Context c) { return allMemo(c).list; }
+
+    private static final class All {
+        final List<Club> base, list; final String follow; final Map<String, Club> byId = new HashMap<>();
+        All(List<Club> base, String follow, List<Club> list) {
+            this.base = base; this.follow = follow; this.list = Collections.unmodifiableList(list);
+            for (Club k : list) if (!byId.containsKey(k.id)) byId.put(k.id, k);  // the first, as a scan of the list finds
+        }
+    }
+    private static volatile All allMemo;
+
+    private static All allMemo(Context c) {
+        List<Club> base = greek(c);  // the same list object until the file or a basketball link changes (cache = null)
+        String follow = c.getSharedPreferences("settings", Context.MODE_PRIVATE).getString("follow", "");
+        All m = allMemo;
+        if (m != null && m.base == base && m.follow.equals(follow)) return m;
+        m = new All(base, follow, withFollowed(c, base, null));
+        allMemo = m;
+        return m;
+    }
 
     /** The Super League clubs. */
     static List<Club> greek(Context c) {
@@ -163,10 +187,7 @@ final class Teams {
         return list;
     }
 
-    static Club get(Context c, String id) {
-        for (Club k : all(c)) if (k.id.equals(id)) return k;
-        return null;
-    }
+    static Club get(Context c, String id) { return allMemo(c).byId.get(id); }
 
     private static Club club(Context c, String id, String name, String crest, String color, String league) {
         Club k = new Club();
@@ -358,9 +379,11 @@ final class Teams {
         SharedPreferences.Editor ed = c.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString("follow", b.toString());
         if (justFollowed != null) ed.putString("meta_name_" + justFollowed.id, justFollowed.name).putString("meta_crest_" + justFollowed.id, justFollowed.crest)
             .putString("meta_league_" + justFollowed.id, justFollowed.league).putString("meta_color_" + justFollowed.id, justFollowed.color == null ? "" : justFollowed.color);
-        ed.commit();
+        // apply(): every reader is in this process, and SharedPreferences updates its in-memory copy at once
+        ed.apply();
         if (justFollowed != null)  // fetch it on the next refresh, even if it was followed (and fetched) a moment ago
-            c.getSharedPreferences("engine", Context.MODE_PRIVATE).edit().remove("lastFull_" + justFollowed.id).remove("sig_" + justFollowed.id).commit();
+            c.getSharedPreferences("engine", Context.MODE_PRIVATE).edit().remove("lastFull_" + justFollowed.id).remove("sig_" + justFollowed.id)
+                .remove("res_" + justFollowed.id).apply();
     }
 
     /** The club whose colours the app wears: the one chosen in Settings while it is followed, else the first followed. */
@@ -372,7 +395,7 @@ final class Teams {
     }
 
     static void setFavourite(Context c, String id) {
-        c.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString("favourite", id).commit();
+        c.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString("favourite", id).apply();
     }
 
     static boolean chosen(Context c) {  // the first-run club picker was completed (or skipped) once

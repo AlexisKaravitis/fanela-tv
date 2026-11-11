@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.1.2 (11 November 2026)
+
+- The match screen has room for longer names. Its lines break between the teams or after a "·", never inside a
+  club's name or "Magenta TV".
+- Karditsa reads "Karditsa" (and "Καρδίτσα" in Greek) on every card, however the data source spells it.
+- New screenshots in the guides, and the "Likely" wording used for TV partners outside Greece.
+
+## 1.1.1 (11 November 2026)
+
+A finishing pass: new match cards, a faster and lighter app, and many small fixes.
+
+**Cards**
+- New match cards, designed first for the TV's home screen: the competition is back at the top left, team names are
+  calmer and always the same size, long names wrap neatly, and the card stands out on a dark home screen.
+- One way of showing where to watch everywhere: "Novasports 4 · ch. 325 on Magenta TV", or "Likely" with the channel
+  logo when it's a guess. WIN, DRAW and LOSS line up with the channel line; postponed matches say so in amber.
+- Three-digit basketball scores stay large; live cards show the clock ("90'+3'", "Q3") instead of a second LIVE label.
+
+**Better**
+- The home screen appears at once with the cards already on the TV, and new ones swap in as they're drawn. Placeholder
+  cards show while a club loads.
+- One type scale and one focus motion across the app; Settings choices (language, country, favourite club) open as
+  lists; Privacy and Sources have a Close button; first start has one Done button, or "Skip for now".
+- Basketball-only clubs read "Real Madrid · Basketball"; Spanish, Italian, Turkish, German, French and Adriatic
+  basketball games carry their own league names instead of "Basket League".
+- Clearer wording: "Updated" vs "Updating…", a short offline line, and Greek buttons that read naturally.
+
+**Lighter**
+- Far fewer downloads and redraws during live matches, fewer refreshes when no match is near, and much less memory
+  used while drawing cards. Files of clubs you stop following are cleaned up.
+- The app no longer asks for the permission to install updates, since it doesn't update itself.
+
 ## 1.1.0 (11 November 2026)
 
 Fanela now also follows clubs and leagues outside Greece. In Greece it works and looks exactly as before. Updating

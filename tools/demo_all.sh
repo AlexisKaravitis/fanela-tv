@@ -3,10 +3,10 @@
 # usage: sh tools/demo_all.sh <adb serial> <out dir> [lang...]
 #   CLUBS="359 382 nba13"  clubs to draw (ESPN ids; NBA teams as nba<id>). Default: the Super League.
 #   COUNTRY=GB             draw them as a viewer in that country sees them (where-to-watch); default: the app's setting.
-# Use an emulator or a test device; this is the worldwide exploration (app.fanela.world.debug).
+# Use an emulator or a test device; the debug build (app.fanela.tv.debug).
 export MSYS_NO_PATHCONV=1
 S=$1; OUT=$2; shift 2; LANGS=${*:-"en el"}
-A="adb -s $S"; P=app.fanela.world.debug
+A="adb -s $S"; P=app.fanela.tv.debug
 CLUBS=${CLUBS:-"435 605 887 443 11553 1010 6790 5276 132429 8354 2575 11431 20043 21969"}
 for L in $LANGS; do for C in $CLUBS; do
   N=${C}_$L${COUNTRY:+_$COUNTRY}

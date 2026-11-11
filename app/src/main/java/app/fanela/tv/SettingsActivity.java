@@ -45,6 +45,7 @@ public class SettingsActivity extends Activity {
     private SharedPreferences settings;
     private TextView status;
     private View langOption, countryOption, favouriteOption;
+    private TextView topDone;  // first-run setup: "Skip for now" until a club is followed, then "Done"
     private LinearLayout leagueBar, grid;  // the league chips and the clubs grid under them
     private String league;                 // the league the grid shows
     private int tileW, gap;
@@ -124,7 +125,7 @@ public class SettingsActivity extends Activity {
     private TextView text(String s, float sp, int color, boolean bold) { return Ui.text(this, s, sp, color, bold); }
 
     private TextView heading(String s) {
-        TextView t = text(s, 20, Ui.TEXT, true);
+        TextView t = text(s, 22, Ui.TEXT, true);
         t.setPadding(0, dp(18), 0, dp(8));
         return t;
     }
@@ -150,20 +151,21 @@ public class SettingsActivity extends Activity {
         gap = dp(12);
         tileW = (avail - (COLS - 1) * gap) / COLS;
 
-        TextView title = text(I18n.t(setup ? "welcome_title" : "settings"), 28, Ui.TEXT, true);
+        TextView title = text(I18n.t(setup ? "welcome_title" : "settings"), 32, Ui.TEXT, true);
         if (setup) {  // Done is always one press of Up away, not only under the whole grid
             LinearLayout titleRow = new LinearLayout(this);
             titleRow.setOrientation(LinearLayout.HORIZONTAL);
             titleRow.setGravity(Gravity.CENTER_VERTICAL);
             titleRow.setClipChildren(false);
             titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-            TextView topDone = Ui.button(this, I18n.t("done"));
+            topDone = Ui.button(this, "");
+            updateDone();
             topDone.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { finishSetup(); } });
             titleRow.addView(topDone, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             page.addView(titleRow);
         } else page.addView(title);
         if (setup) {
-            TextView sub = text(I18n.t("welcome_text"), 15, Ui.SUB, false);
+            TextView sub = text(I18n.t("welcome_text"), 16, Ui.SUB, false);
             sub.setPadding(0, dp(4), 0, 0);
             page.addView(sub);
         }
@@ -202,13 +204,7 @@ public class SettingsActivity extends Activity {
         page.addView(grid);
         View first = showLeague(league);
 
-        if (setup) {
-            TextView done = Ui.button(this, I18n.t("done"));
-            done.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { finishSetup(); } });
-            LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            dl.setMargins(0, dp(16), 0, dp(8));
-            page.addView(done, dl);
-        } else {
+        if (!setup) {
             // ---------- options ----------
             page.addView(heading(I18n.t("options")));
             page.addView(langOption = languageOption(avail));
@@ -259,7 +255,9 @@ public class SettingsActivity extends Activity {
                 public void toggle() { showText(I18n.t("privacy"), I18n.t("privacy_full")); }
             }));
 
-            if (AppUpdate.enabled()) {
+            if (!AppUpdate.enabled()) {  // the version, and where new ones come from (this build doesn't update itself)
+                page.addView(info("Fanela " + BuildConfig.VERSION_NAME, I18n.t("releases_info"), avail));
+            } else {
                 page.addView(option(I18n.t("updates"), I18n.f("version", BuildConfig.VERSION_NAME), avail, new Value() {
                     public boolean on() { return AppUpdate.available(SettingsActivity.this) != null; }
                     public String get() { AppUpdate.Release r = AppUpdate.available(SettingsActivity.this); return r == null ? I18n.t("up_to_date") : I18n.f("install_version", r.version); }
@@ -306,14 +304,14 @@ public class SettingsActivity extends Activity {
         for (final Leagues.League l : Leagues.ordered(Leagues.country(this))) {
             if (i++ == 0 || l.basketball() && !basketShown) {
                 basketShown |= l.basketball();
-                TextView group = text(I18n.t(l.basketball() ? "basketball_group" : "football_group"), 13, Ui.SUB, true);
+                TextView group = text(I18n.t(l.basketball() ? "basketball_group" : "football_group"), 14, Ui.SUB, true);
                 group.setFocusable(false);
                 group.setPadding(i == 1 ? 0 : dp(8), 0, dp(10), 0);
                 leagueBar.addView(group, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 ((LinearLayout.LayoutParams) group.getLayoutParams()).gravity = Gravity.CENTER_VERTICAL;
                 group.setGravity(Gravity.CENTER_VERTICAL);
             }
-            final TextView chip = text(l.label(), 15, Ui.TEXT, true);
+            final TextView chip = text(l.label(), 16, Ui.TEXT, true);
             chip.setSingleLine(true);
             chip.setPadding(dp(18), dp(8), dp(18), dp(8));
             chip.setFocusable(true);
@@ -356,7 +354,7 @@ public class SettingsActivity extends Activity {
             }};
             chip.setOnFocusChangeListener(new View.OnFocusChangeListener() { public void onFocusChange(View v, boolean has) {
                 paint.run();
-                v.animate().scaleX(has ? 1.06f : 1f).scaleY(has ? 1.06f : 1f).setDuration(120).start();
+                Ui.focusMotion(v, has, Ui.PILL);
                 ui.removeCallbacks(pick);
                 if (has) ui.postDelayed(pick, 300);  // a short rest on a league shows it, no OK needed
             }});
@@ -433,7 +431,7 @@ public class SettingsActivity extends Activity {
         List<Teams.Club> clubs = Teams.sorted(this, lg);
         if (clubs != null) sortByShownName(clubs);
         if (clubs == null) {
-            final TextView wait = text(I18n.t("loading_clubs"), 15, Ui.SUB, false);
+            final TextView wait = text(I18n.t("loading_clubs"), 16, Ui.SUB, false);
             wait.setPadding(0, dp(10), 0, dp(10));
             grid.addView(wait);
             final Context app = getApplicationContext();
@@ -572,8 +570,8 @@ public class SettingsActivity extends Activity {
         col.setClipChildren(false);
         col.setClipToPadding(false);
         col.setPadding(dp(Ui.SIDE + 80), dp(Ui.TOP + 10), dp(Ui.SIDE + 80), dp(Ui.TOP + 10));
-        col.addView(text(title, 26, Ui.TEXT, true));
-        TextView sub = text(hint, 15, Ui.SUB, false);
+        col.addView(text(title, 28, Ui.TEXT, true));
+        TextView sub = text(hint, 16, Ui.SUB, false);
         sub.setPadding(0, dp(4), 0, dp(14));
         col.addView(sub);
         int side = cols > 1 ? Ui.SIDE : Ui.SIDE + 80;
@@ -631,20 +629,33 @@ public class SettingsActivity extends Activity {
         // the Greek word only where a Greek speaker may be looking for it: a Greek TV, or a viewer in Greece or Cyprus
         String cc = Leagues.country(this);
         boolean both = I18n.el() || "el".equals(java.util.Locale.getDefault().getLanguage()) || "GR".equals(cc) || "CY".equals(cc);
-        return option(I18n.t(both ? "language" : "language_plain"), "", avail, new Value() {
+        final String title = I18n.t(both ? "language" : "language_plain");
+        return option(title, I18n.t("language_hint"), avail, new Value() {
             public String get() { return I18n.t("lang_value"); }
             public boolean on() { return false; }
-            public void toggle() {
-                settings.edit().putString("lang", I18n.el() ? "en" : "el").commit();
-                final Context app = getApplicationContext();
-                work.execute(new Runnable() { public void run() {  // only text changes: redraw, no downloads
-                    Engine.background();
-                    try { Engine.draw(app); } catch (Throwable ignored) { }
-                }});
-                getIntent().putExtra("focus", "lang");
-                recreate();
+            public void toggle() {  // a list like Country and Favourite: each language in its own words, the current one ticked
+                showChoice(title, I18n.t("language_hint"), java.util.Arrays.asList("en", "el"), java.util.Arrays.asList("English", "Ελληνικά"),
+                    null, 0, 1, I18n.lang(), new Chosen() {
+                    public void chosen(String lang) {
+                        settings.edit().putString("lang", lang).commit();
+                        final Context app = getApplicationContext();
+                        work.execute(new Runnable() { public void run() {  // only text changes: redraw, no downloads
+                            Engine.background();
+                            try { Engine.draw(app); } catch (Throwable ignored) { }
+                        }});
+                        getIntent().putExtra("focus", "lang");
+                        recreate();
+                    }
+                });
             }
         });
+    }
+
+    /** First-run setup: the top button reads "Skip for now" while no club is followed, "Done" once one is. */
+    private void updateDone() {
+        if (topDone == null) return;
+        String s = I18n.t(Teams.followed(this).isEmpty() ? "skip" : "done");
+        if (!s.contentEquals(topDone.getText())) topDone.setText(s);
     }
 
     private void refreshStatus() {
@@ -654,14 +665,13 @@ public class SettingsActivity extends Activity {
         if (follow.isEmpty()) s.append(I18n.t("no_clubs")).append('\n');
         boolean basket = Teams.basketball(this);
         // one line when all is well; a club is named only when its data is old (offline, or a source is down)
-        long latest = 0;
+        long latest = Store.lastUpdateAll(this);  // the same value as Home's "Updated …"
         StringBuilder old = new StringBuilder();
         for (String id : follow) {
             Teams.Club k = Teams.get(this, id);
             if (k == null) continue;
             for (String team : k.teams(basket)) {
                 long t = Store.lastUpdate(this, id, team);
-                latest = Math.max(latest, t);
                 if (t <= 0 || Store.stale(this, id, team))  // never loaded, or old
                     old.append("⚠ ").append(k.label()).append(" · ").append(I18n.t("FC".equals(team) ? "src_espn" : "src_basket"))
                         .append(": ").append(when(t)).append('\n');
@@ -670,8 +680,8 @@ public class SettingsActivity extends Activity {
         if (!follow.isEmpty())
             s.append(latest <= 0 ? I18n.t("never_updated") : I18n.f("updated", I18n.day(latest).toLowerCase(I18n.locale()) + " " + I18n.time(latest))).append('\n');
         s.append(old);
-        s.append('\n').append(I18n.f("version", BuildConfig.VERSION_NAME));
-        if (!s.toString().equals(String.valueOf(status.getText()))) status.setText(s.toString());
+        String text = s.toString().replaceAll("\n+$", "");  // the version has its own row in About
+        if (!text.equals(String.valueOf(status.getText()))) status.setText(text);
     }
 
     private String when(long t) { return t <= 0 ? I18n.t("never") : I18n.day(t) + " " + I18n.time(t); }
@@ -687,16 +697,16 @@ public class SettingsActivity extends Activity {
         LinearLayout texts = new LinearLayout(this);
         texts.setOrientation(LinearLayout.VERTICAL);
         texts.addView(text(title, 18, Ui.TEXT, true));
-        if (!sub.isEmpty()) texts.addView(text(sub, 13, Ui.SUB, false));
+        if (!sub.isEmpty()) texts.addView(text(sub, 14, Ui.SUB, false));
         o.addView(texts, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        final TextView val = text(v.get(), 17, Ui.INK, true);
+        final TextView val = text(v.get(), 16, Ui.INK, true);
         val.setPadding(dp(16), dp(6), dp(16), dp(6));
         val.setDuplicateParentStateEnabled(true);
         LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         vp.setMargins(dp(16), 0, 0, 0);
         o.addView(val, vp);
         final boolean[] off = {false};  // option rows keep the neutral surface; the pill shows the state
-        Ui.focusable(o, 1.0f, off);
+        Ui.focusable(o, Ui.ROW, off);
         final String langValue = I18n.t("lang_value"), read = I18n.t("read"), showRow = I18n.t("row_show");
         final Runnable show = new Runnable() { public void run() {
             String now = v.get();
@@ -742,9 +752,9 @@ public class SettingsActivity extends Activity {
         o.addView(b);
         o.setFocusable(true);
         o.setFocusableInTouchMode(true);
-        o.setBackground(Ui.rounded(this, Ui.SURFACE, 14, 0));
-        o.setOnFocusChangeListener(new View.OnFocusChangeListener() {
-            public void onFocusChange(View x, boolean has) { x.setBackground(Ui.rounded(x.getContext(), has ? Ui.lighten(Ui.SURFACE) : Ui.SURFACE, 14, 0)); }
+        Ui.paint(o, false, false);
+        o.setOnFocusChangeListener(new View.OnFocusChangeListener() {  // the option rows' focus: lighter, with a white outline
+            public void onFocusChange(View x, boolean has) { Ui.paint(x, has, false); }
         });
         o.setContentDescription(title + ". " + body);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -827,7 +837,7 @@ public class SettingsActivity extends Activity {
         name.setLineSpacing(0, 0.92f);
         name.setPadding(0, dp(4), 0, 0);
         col.addView(name, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        final TextView state = text(I18n.t("following"), 13, Ui.TEXT, false);
+        final TextView state = text(I18n.t("following"), 14, Ui.TEXT, false);
         state.setGravity(Gravity.CENTER);
         state.setSingleLine(true);
         col.addView(state, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -845,7 +855,7 @@ public class SettingsActivity extends Activity {
             f.setContentDescription(k.label() + ", " + I18n.t(on[0] ? "following" : "not_following"));
             Ui.paint(f, f.hasFocus() || f.isFocused(), on[0]);
         }};
-        Ui.focusable(f, 1.06f, on);
+        Ui.focusable(f, Ui.CARD, on);
         show.run();
         f.setOnClickListener(new View.OnClickListener() { public void onClick(View v) {
             Set<String> follow = new LinkedHashSet<>(Teams.followed(SettingsActivity.this));
@@ -864,6 +874,7 @@ public class SettingsActivity extends Activity {
             if (on[0] && HomeRows.enabled(SettingsActivity.this)) addRow(k);
             changed();
             refreshStatus();
+            updateDone();
         }});
         // badge or crest: drawn / loaded in the background (crests are cached on disk after the first time)
         final Context app = getApplicationContext();
@@ -882,32 +893,44 @@ public class SettingsActivity extends Activity {
         return f;
     }
 
-    // ---------- a full-screen text panel (privacy policy) ----------
+    // ---------- a full-screen text panel (privacy policy, sources) ----------
+    /**
+     * Up / down scroll the text, where the focus starts; at its end, down reaches Close (a pill like the match panel's,
+     * always in view under the text). Back closes too.
+     */
     private void showText(String title, String body) {
         closeDialog();
         dialog = new FrameLayout(this);
         dialog.setBackgroundColor(Color.argb(240, 12, 13, 17));
         dialog.setClickable(true);
+        LinearLayout frame = new LinearLayout(this);
+        frame.setOrientation(LinearLayout.VERTICAL);
+        frame.setClipChildren(false);
+        frame.setClipToPadding(false);
         final ScrollView sv = new ScrollView(this);
         sv.setFocusable(true);
         sv.setVerticalFadingEdgeEnabled(true);
         sv.setFadingEdgeLength(dp(40));
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(dp(Ui.SIDE + 80), dp(Ui.TOP + 10), dp(Ui.SIDE + 80), dp(Ui.TOP + 10));
-        col.addView(text(title, 26, Ui.TEXT, true));
+        col.setPadding(dp(Ui.SIDE + 80), dp(Ui.TOP + 10), dp(Ui.SIDE + 80), 0);
+        col.addView(text(title, 28, Ui.TEXT, true));
         TextView t = text(body, 16, Color.rgb(214, 218, 226), false);
         t.setLineSpacing(0, 1.25f);
         t.setPadding(0, dp(14), 0, dp(14));
         col.addView(t);
-        TextView hint = text(I18n.t("back_to_close"), 13, Ui.SUB, false);
-        col.addView(hint);
         sv.addView(col);
-        dialog.addView(sv, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        frame.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        TextView close = Ui.button(this, I18n.t("close"));
+        close.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { closeDialog(); } });
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        cl.setMargins(dp(Ui.SIDE + 80), dp(12), 0, dp(Ui.TOP + 10));
+        frame.addView(close, cl);
+        dialog.addView(frame, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         root.addView(dialog, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         dialog.setTag(getCurrentFocus());
         pageScroll.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);  // the remote stays inside the panel
-        sv.requestFocus();  // up/down scroll the text; Back closes
+        sv.requestFocus();  // up/down scroll the text; down at its end goes to Close; Back closes
         backCallback = Ui.onBack(this, backCallback, new Runnable() { public void run() { onBackKey(); } });
     }
 
@@ -925,7 +948,7 @@ public class SettingsActivity extends Activity {
     /** Creates (or restores) the club's row now and asks Android to show it if it is hidden. */
     private void addRow(final Teams.Club k) {
         final Context app = getApplicationContext();
-        final String label = k.label();
+        final String label = k.heading();
         work.execute(new Runnable() { public void run() {
             try {
                 Net.fetchImage(app, k.crest);
@@ -1016,7 +1039,7 @@ public class SettingsActivity extends Activity {
                 Teams.Club k = Teams.get(app, id);
                 if (k == null) continue;
                 long ch = row.getLong(k.rowKey(), -1);
-                if (ch != -1 && !pending.contains(ch + "	") && !HomeRows.browsable(app, ch)) { ids.add(new long[]{ch}); names.add(k.label()); }
+                if (ch != -1 && !pending.contains(ch + "	") && !HomeRows.browsable(app, ch)) { ids.add(new long[]{ch}); names.add(k.heading()); }
             }
             ui.post(new Runnable() { public void run() {
                 if (gone() || hiddenRows == null) return;

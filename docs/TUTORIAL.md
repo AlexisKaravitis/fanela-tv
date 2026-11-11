@@ -1,6 +1,6 @@
 # Using Fanela
 
-This guide walks through Fanela 1.1.0 with the TV remote. If it isn't on your TV yet, start with the
+This guide walks through Fanela 1.1.2 with the TV remote. If it isn't on your TV yet, start with the
 [install guide](INSTALL.md).
 
 You only need four buttons: the arrows, **OK**, **Back** and **Home**.
@@ -51,7 +51,7 @@ the channel. Press **up** from the first row to reach **Settings**.
   - **"Channel: to be announced":** nothing is known yet.
 
   In other countries:
-  - **"Usually on" and one or two names** (for example Sky Sports and TNT Sports in the UK): the channels or services
+  - **"Likely" and one or two names** (for example Sky Sports and TNT Sports in the UK): the channels or services
     that hold this competition's rights in your country this season. One match can still be elsewhere, so your
     provider's guide has the last word.
   - **"Check your provider's guide":** Fanela has no official list of this competition's TV partners for your

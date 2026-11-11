@@ -130,6 +130,16 @@ final class Ui {
         v.setBackground(rounded(v.getContext(), focused ? lighten(base) : base, 14, focused ? Color.WHITE : on ? ACCENT : 0));
     }
 
+    /** The one focus motion: cards and club tiles grow to CARD, pills and chips to PILL, full-width rows not at all. */
+    static final float CARD = 1.08f, PILL = 1.04f, ROW = 1f;
+    private static final android.view.animation.Interpolator EASE = new android.view.animation.DecelerateInterpolator();
+
+    /** Grows (150 ms, decelerating) and lifts (8 dp) a view as it gains focus, and back as it loses it. */
+    static void focusMotion(View v, boolean has, float scale) {
+        v.animate().scaleX(has ? scale : 1f).scaleY(has ? scale : 1f).setDuration(150).setInterpolator(EASE).start();
+        v.setElevation(has ? dp(v.getContext(), 8) : 0);
+    }
+
     /** Makes a view a focusable control: grows slightly and lifts when focused. on[0] is read on every focus change. */
     static void focusable(final View v, final float scale, final boolean[] on) {
         v.setFocusable(true);
@@ -137,9 +147,8 @@ final class Ui {
         v.setClickable(true);
         v.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             public void onFocusChange(View x, boolean has) {
-                x.animate().scaleX(has ? scale : 1f).scaleY(has ? scale : 1f).setDuration(120).start();
+                focusMotion(x, has, scale);
                 paint(x, has, on[0]);
-                x.setElevation(has ? dp(x.getContext(), 8) : 0);
             }
         });
         paint(v, false, on[0]);
@@ -158,7 +167,7 @@ final class Ui {
             public void onFocusChange(View x, boolean has) {
                 ((TextView) x).setTextColor(has ? INK : TEXT);
                 x.setBackground(rounded(x.getContext(), has ? Color.WHITE : SURFACE, 24, 0));
-                x.animate().scaleX(has ? 1.05f : 1f).scaleY(has ? 1.05f : 1f).setDuration(120).start();
+                focusMotion(x, has, PILL);
             }
         });
         return b;

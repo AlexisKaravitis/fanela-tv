@@ -331,7 +331,7 @@ final class Guide {
             if (tag.contains("ΚΥΠΕΛΛΟ")) m.comp = bc ? "gbl.cup" : "gre.cup";
             else if (!bc) m.comp = "gre.cup";
             else if (tag.contains("BASKETBALL CHAMPIONS")) m.comp = "bcl";
-            else m.comp = Sources.bcComp(a.tag);
+            else m.comp = Sources.bcCompGreekGuide(a.tag);
             m.league = bc ? (m.comp.startsWith("gbl") ? "gbl" : m.comp) : "gre.cup";
             m.channel = a.channel; m.channelSure = true; m.channelKnown = true;
             m.channelApp = app(a.channel);

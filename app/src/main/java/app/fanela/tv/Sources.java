@@ -22,11 +22,15 @@ final class Sources {
     static final class Result {
         final String source;
         boolean ok;
+        boolean results;  // ESPN's results list was asked for and answered (Engine.resultsDue)
         final List<Match> list = new ArrayList<>();
         Result(String s) { source = s; }
     }
 
-    static List<Result> fetch(Context c, Teams.Club k, boolean basket) {
+    static List<Result> fetch(Context c, Teams.Club k, boolean basket) { return fetch(c, k, basket, null, true); }
+
+    /** cached: the stored matches (null: none known); results: ESPN's football results are due (see espn()). */
+    static List<Result> fetch(Context c, Teams.Club k, boolean basket, List<Match> cached, boolean results) {
         List<Result> r = new ArrayList<>();
         if (k.nba()) { r.add(nba(k)); return r; }
         if (k.euroOnly()) {  // basketball only, whatever the basketball setting says
@@ -34,7 +38,7 @@ final class Sources {
             else { Result none = new Result("el"); none.ok = true; r.add(none); }  // in neither competition this season
             return r;
         }
-        r.add(espn(k));
+        r.add(espn(k, cached, results));
         if (basket && k.hasBasket) {
             boolean euroGames = false;
             if (k.bcComp != null) { Result e = euro(k); r.add(e); euroGames = !e.list.isEmpty() || !e.ok; }
@@ -68,16 +72,38 @@ final class Sources {
     }
 
     // ---------- football: ESPN ----------
-    static Result espn(Teams.Club k) {
+    static Result espn(Teams.Club k) { return espn(k, null, true); }
+
+    /**
+     * Fixtures, and the results list when it is due (Engine.resultsDue) or when a match the TV knew as coming or being
+     * played has dropped off the fixtures (it has ended). Without the results list, the stored past matches stand in
+     * for it, so the merge keeps them (Store.mergeInto drops what a successful feed no longer lists).
+     */
+    static Result espn(Teams.Club k, List<Match> cached, boolean resultsDue) {
         Result r = new Result("espn");
+        long now = System.currentTimeMillis();
         Map<String, Match> seen = new LinkedHashMap<>();
-        boolean a = espnSchedule(k, "all", "?fixture=true", seen), b = espnSchedule(k, "all", "", seen);
+        boolean a = espnSchedule(k, "all", "?fixture=true", seen);
+        boolean results = cached == null || resultsDue || !a || ended(cached, k.id, seen.keySet(), now);
+        boolean b = !results || espnSchedule(k, "all", "", seen);  // the same order of requests as always when asked for
         r.ok = a && b;
+        r.results = results && b;
         String lg = Leagues.get(k.league) != null && !Leagues.get(k.league).basketball() ? k.league : "gre.1";
         if (!a) espnSchedule(k, lg, "?fixture=true", seen);  // fallback: at least the league
         if (!b) espnSchedule(k, lg, "", seen);
+        if (!results)
+            for (Match m : cached)
+                if (k.id.equals(m.club) && "espn".equals(m.source) && m.start <= now && !seen.containsKey(m.key)) seen.put(m.key, m.copy());
         r.list.addAll(seen.values());
         return r;
+    }
+
+    /** A stored football match that was coming or being played, has kicked off, and is no longer among the fixtures. */
+    static boolean ended(List<Match> cached, String club, java.util.Set<String> fixtures, long now) {
+        for (Match m : cached)
+            if (club.equals(m.club) && "espn".equals(m.source) && ("pre".equals(m.state) || "in".equals(m.state))
+                && m.start <= now && !fixtures.contains(m.key)) return true;
+        return false;
     }
 
     private static boolean espnSchedule(Teams.Club k, String lg, String q, Map<String, Match> into) {
@@ -176,15 +202,37 @@ final class Sources {
         return m;
     }
 
+    /**
+     * A live scoreboard, asked for once per tick: boards keeps every answer (null for a failure) by URL, so clubs that
+     * play in the same league at the same time share one request. boards may be null (no sharing).
+     */
+    static String board(String url, Map<String, String> boards) throws java.io.IOException {
+        if (boards != null && boards.containsKey(url)) {
+            String s = boards.get(url);
+            if (s == null) throw new java.io.IOException("failed earlier in this tick");
+            return s;
+        }
+        try {
+            String s = Net.httpLive(url);
+            if (boards != null) boards.put(url, s);
+            return s;
+        } catch (java.io.IOException e) {
+            if (boards != null) boards.put(url, null);
+            throw e;
+        }
+    }
+
+    static Match espnLive(Match m) { return espnLive(m, null); }
+
     /** Live refresh of one football match from its league scoreboard (UTC date, then the day before). */
-    static Match espnLive(Match m) {
+    static Match espnLive(Match m, Map<String, String> boards) {
         SimpleDateFormat f = new SimpleDateFormat("yyyyMMdd", Locale.US);
         f.setTimeZone(TimeZone.getTimeZone("UTC"));
         String id = m.key.substring(m.key.indexOf("espn:") + 5);
         for (long day : new long[]{m.start, m.start - 86400000L}) {
             try {
-                JSONArray ev = new JSONObject(Net.httpLive("https://site.api.espn.com/apis/site/v2/sports/soccer/" + m.league
-                    + "/scoreboard?dates=" + f.format(day))).optJSONArray("events");
+                JSONArray ev = new JSONObject(board("https://site.api.espn.com/apis/site/v2/sports/soccer/" + m.league
+                    + "/scoreboard?dates=" + f.format(day), boards)).optJSONArray("events");
                 for (int i = 0; ev != null && i < ev.length(); i++)
                     if (id.equals(ev.getJSONObject(i).optString("id"))) {
                         Match n = espn(ev.getJSONObject(i), m.league, m.club);
@@ -229,15 +277,15 @@ final class Sources {
         return m;
     }
 
-    /** Live refresh of one NBA game from the scoreboard (ESPN dates are US days: the UTC date, then the day before). */
-    static Match nbaLive(Match m) {
-        SimpleDateFormat f = new SimpleDateFormat("yyyyMMdd", Locale.US);
-        f.setTimeZone(TimeZone.getTimeZone("UTC"));
+    static Match nbaLive(Match m) { return nbaLive(m, null); }
+
+    /** Live refresh of one NBA game from the scoreboard (ESPN dates are US days: see nbaDates). */
+    static Match nbaLive(Match m, Map<String, String> boards) {
         String id = m.key.substring(m.key.indexOf("nba:") + 4);
-        for (long day : new long[]{m.start, m.start - 86400000L}) {
+        for (String day : nbaDates(m.start)) {
             try {
-                JSONArray ev = new JSONObject(Net.httpLive("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates="
-                    + f.format(day))).optJSONArray("events");
+                JSONArray ev = new JSONObject(board("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates="
+                    + day, boards)).optJSONArray("events");
                 for (int i = 0; ev != null && i < ev.length(); i++)
                     if (id.equals(ev.getJSONObject(i).optString("id"))) {
                         Match n = nbaEvent(ev.getJSONObject(i), m.club);
@@ -246,6 +294,21 @@ final class Sources {
             } catch (Exception ignored) { }
         }
         return null;
+    }
+
+    /**
+     * The scoreboard days to look a game up in: its US Eastern date first (the one ESPN files NBA games under, so one
+     * request is enough), then, if they differ, the UTC date and the day before as before.
+     */
+    static List<String> nbaDates(long start) {
+        SimpleDateFormat us = new SimpleDateFormat("yyyyMMdd", Locale.US), utc = new SimpleDateFormat("yyyyMMdd", Locale.US);
+        us.setTimeZone(TimeZone.getTimeZone("America/New_York"));
+        utc.setTimeZone(TimeZone.getTimeZone("UTC"));
+        java.util.LinkedHashSet<String> d = new java.util.LinkedHashSet<>();
+        d.add(us.format(start));
+        d.add(utc.format(start));
+        d.add(utc.format(start - 86400000L));
+        return new ArrayList<>(d);
     }
 
     // ---------- basketball: EuroLeague (E) / EuroCup (U) ----------
@@ -329,14 +392,40 @@ final class Sources {
 
     // ---------- basketball: TheSportsDB next/last (Greek Basket League, BCL) ----------
     /** Basketball competition code from TheSportsDB's league name. */
+    /**
+     * The competition of a TheSportsDB basketball game. Only Greek competitions map to the Basket League and its cup;
+     * other domestic leagues get their own ids (Real Madrid's Liga Endesa games are not "Basket League"), and anything
+     * unknown keeps TheSportsDB's own league name as its label.
+     */
     static String bcComp(String lg) {
         String l = lg.toLowerCase(Locale.ROOT);
         if (l.contains("champions")) return "bcl";
         if (l.contains("europe cup")) return "fiba.europe_cup";
         if (l.contains("eurocup")) return "eurocup";
         if (l.contains("euroleague")) return "euroleague";
-        if (l.contains("cup")) return "gbl.cup";
-        return "gbl";
+        boolean greek = l.contains("greek") || l.contains("greece") || l.contains("gbl") || l.contains("stoiximan")
+            || l.contains("basket league") || l.contains("a1 ethniki");
+        if (greek) return l.contains("cup") ? "gbl.cup" : "gbl";
+        if (l.contains("acb") || l.contains("liga endesa") || l.contains("spanish")) return "esp.acb";
+        if (l.contains("lega basket") || l.contains("italian") || l.contains("serie a")) return "ita.lba";
+        if (l.contains("bsl") || l.contains("turkish") || l.contains("super ligi") || l.contains("süper ligi")) return "tur.bsl";
+        if (l.contains("bbl") || l.contains("german") || l.contains("bundesliga")) return "ger.bbl";
+        if (l.contains("betclic") || l.contains("pro a") || l.contains("french") || l.contains("lnb")) return "fra.proa";
+        if (l.contains("aba") || l.contains("adriatic")) return "aba";
+        return lg.trim().isEmpty() ? "gbl" : lg.trim();  // unknown: its own name, never mistaken for the Greek league
+    }
+
+    /** The Greek guide (Sport24): European cups and the foreign leagues it names (Greek TV shows ACB games, for example)
+     *  keep their own label; anything else unrecognised is the Basket League, as in 1.0. */
+    static String bcCompGreekGuide(String tag) {
+        String c = bcComp(tag);
+        switch (c) {
+            case "bcl": case "fiba.europe_cup": case "eurocup": case "euroleague":
+            case "esp.acb": case "ita.lba": case "tur.bsl": case "ger.bbl": case "fra.proa": case "aba":
+                return c;
+            default:
+                return tag.toLowerCase(Locale.ROOT).contains("cup") ? "gbl.cup" : "gbl";  // the 1.0 rule
+        }
     }
 
     static Result tsdbBc(Teams.Club k, String tid, boolean euroCovered) {
@@ -350,7 +439,7 @@ final class Sources {
                 for (int i = 0; ev != null && i < ev.length(); i++) {
                     try {
                         JSONObject e = ev.getJSONObject(i);
-                        String lg = e.optString("strLeague").toLowerCase(Locale.ROOT);
+                        String lg = e.optString("strLeague");  // bcComp lowercases; an unknown league keeps its own spelling as label
                         String comp = bcComp(lg);
                         if (euroCovered && ("euroleague".equals(comp) || "eurocup".equals(comp))) continue;  // own API
                         Match m = tsdb(e, k.id, tid);

@@ -1,6 +1,10 @@
 plugins { id 'com.android.application' }
 
 // Release signing: keystore.properties next to this file (never committed). Without it, release builds are unsigned.
+// GitHub "owner/repo" whose releases carry new APKs (in-app updates). Empty = no update checks, and a release asks for
+// no install permission (the updater's manifest entries are added only when this is set: src/updater).
+def updateRepo = ''
+
 def ksFile = rootProject.file('keystore.properties')
 def ks = new Properties()
 if (ksFile.exists()) ksFile.withInputStream { ks.load(it) }
@@ -15,19 +19,21 @@ android {
         applicationId 'app.fanela.tv'
         minSdk 26          // Android TV 8.0: first version with home-screen rows (preview channels)
         targetSdk 36
-        versionCode 7
-        versionName '1.1.0'
+        versionCode 9
+        versionName '1.1.2'
         resourceConfigurations += ['en', 'el']
         // Club crests and exact channels from the TV guides (both can be switched off for a stricter build).
         buildConfigField 'boolean', 'REMOTE_IMAGES', 'true'
         buildConfigField 'boolean', 'GUIDES', 'true'
-        // GitHub "owner/repo" whose releases carry new APKs (in-app updates). Empty = no update checks.
-        buildConfigField 'String', 'UPDATE_REPO', '""'
+        buildConfigField 'String', 'UPDATE_REPO', '"' + updateRepo + '"'
         // Ronin Sport API key: never in a release (see the debug build type). Empty = off.
         buildConfigField 'String', 'RONIN_KEY', '""'
     }
 
     buildFeatures { buildConfig true }
+
+    // the updater's permission and receiver: debug builds always (src/debug), a release only when it can update itself
+    if (!updateRepo.isEmpty()) sourceSets { release { manifest.srcFile 'src/updater/AndroidManifest.xml' } }
 
     signingConfigs {
         release {

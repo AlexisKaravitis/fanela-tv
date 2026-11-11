@@ -194,6 +194,18 @@ final class HomeRows {
         }
     }
 
+    /**
+     * A background refresh has something to do: a followed club has no row yet (the refresh creates it), or one of our
+     * rows is on the home screen. False when every stored row is hidden.
+     */
+    static boolean worthRefreshing(Context c) {
+        SharedPreferences sp = c.getSharedPreferences("row", Context.MODE_PRIVATE);
+        for (String id : Teams.followed(c)) if (sp.getLong("club_" + id, -1) == -1) return true;
+        for (Map.Entry<String, ?> e : sp.getAll().entrySet())
+            if (clubOf(e.getKey()) != null && e.getValue() instanceof Long && browsable(c, (Long) e.getValue())) return true;
+        return false;
+    }
+
     static boolean browsable(Context c, long id) {
         try (Cursor q = c.getContentResolver().query(TvContract.buildChannelUri(id),
                 new String[]{TvContract.Channels.COLUMN_BROWSABLE}, null, null, null)) {

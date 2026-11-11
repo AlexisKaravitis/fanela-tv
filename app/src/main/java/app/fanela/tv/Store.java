@@ -75,7 +75,8 @@ final class Store {
         File[] fs = c.getFilesDir().listFiles();
         for (int i = 0; fs != null && i < fs.length; i++) {
             String n = fs[i].getName();
-            if (n.startsWith("c" + club + "_") || n.equals("guide_magenta_" + club + ".json")) fs[i].delete();
+            if (n.startsWith("c" + club + "_") || n.equals("guide_magenta_" + club + ".json")
+                || n.equals("guide_sofa_" + club + ".json")) fs[i].delete();
         }
         SharedPreferences cards = c.getSharedPreferences("cards", Context.MODE_PRIVATE);
         SharedPreferences.Editor ed = cards.edit();
@@ -148,6 +149,20 @@ final class Store {
             : Math.max(Math.max(Math.max(lastOk(c, "el", club), lastOk(c, "ec", club)), lastOk(c, "tsdb", club)), lastOk(c, "nba", club));
     }
 
+    /**
+     * The newest update over every followed club and each sport it shows (Club.teams): one value for Home's
+     * "Updated …" and the Settings status, so the two always agree. 0: never.
+     */
+    static long lastUpdateAll(Context c) {
+        boolean basket = Teams.basketball(c);
+        long last = 0;
+        for (String id : Teams.followed(c)) {
+            Teams.Club k = Teams.get(c, id);
+            for (String team : k == null ? new String[]{"FC"} : k.teams(basket)) last = Math.max(last, lastUpdate(c, id, team));
+        }
+        return last;
+    }
+
     /** True when the club's main feed for this sport has not answered for 6 hours. */
     static boolean stale(Context c, String club, String team) {
         long ok = lastUpdate(c, club, team);
@@ -180,40 +195,69 @@ final class Store {
                 if (Where.plain(m)) o.put("listedBy", m.listedBy);
                 a.put(o);
             }
-            writeAtomic(new File(c.getFilesDir(), "matches4.json"), a.toString());  // v4 format (v3 file is ignored)
-        } catch (Exception ignored) { }
+            String text = a.toString();
+            File f = new File(c.getFilesDir(), "matches4.json");
+            writeAtomic(f, text);  // v4 format (v3 file is ignored)
+            memo = parse(text);  // exactly what load() would read back (a null channelApp, say, reads as Magenta in Greece)
+            memoPath = f.getPath();
+            memoMod = f.lastModified();
+            memoLen = f.length();
+        } catch (Exception ignored) {
+            memo = null;  // read the file again next time
+        }
     }
+
+    /**
+     * The last parse of the file, keyed on its time and length; save() keeps it up to date. Callers get copies, since
+     * they change the matches they are given (Engine.timeStates).
+     */
+    private static List<Match> memo;
+    private static String memoPath;
+    private static long memoMod = -1, memoLen = -1;
 
     static synchronized List<Match> load(Context c) {
         List<Match> out = new ArrayList<>();
         try {
             File f = new File(c.getFilesDir(), "matches4.json");
-            if (!f.exists()) return out;
-            byte[] b = new byte[(int) f.length()];
-            try (FileInputStream in = new FileInputStream(f)) { int n = 0; while (n < b.length) { int r = in.read(b, n, b.length - n); if (r < 0) break; n += r; } }
-            JSONArray a = new JSONArray(new String(b, StandardCharsets.UTF_8));
-            for (int i = 0; i < a.length(); i++) {
-                try {
-                    JSONObject o = a.getJSONObject(i);
-                    Match m = new Match();
-                    m.club = o.optString("club"); m.team = o.optString("team"); m.source = o.optString("source");
-                    m.key = o.optString("key"); m.comp = o.optString("comp"); m.league = o.optString("league");
-                    m.home = o.optString("home"); m.away = o.optString("away"); m.clubIsHome = o.optBoolean("clubIsHome");
-                    m.hs = o.isNull("hs") ? null : o.optString("hs", null); m.as = o.isNull("as") ? null : o.optString("as", null);
-                    m.state = o.optString("state", "pre"); m.detail = o.optString("detail"); m.start = o.optLong("start");
-                    m.tbd = o.optBoolean("tbd"); m.quarter = o.optInt("quarter"); m.clubWon = o.optInt("clubWon", 9);
-                    m.pens = o.isNull("pens") ? null : o.optString("pens", null);
-                    m.homeCrest = o.optString("homeCrest"); m.awayCrest = o.optString("awayCrest");
-                    m.listedBy = o.optString("listedBy", "");
-                    m.channel = o.optString("channel");
-                    m.channelApp = o.has("channelApp") ? o.optString("channelApp") : Where.plain(m) ? null : Cards.MAGENTA;
-                    m.channelNo = o.optInt("channelNo"); m.channelLogo = o.isNull("channelLogo") ? null : o.optString("channelLogo", null);
-                    m.channelSure = o.optBoolean("channelSure"); m.channelKnown = o.optBoolean("channelKnown", true);
-                    m.seenLiveAt = o.optLong("seenLiveAt");
-                    if (!m.key.isEmpty() && !m.club.isEmpty() && m.start > 0) out.add(m);
-                } catch (Exception ignored) { }
+            if (!f.exists()) { memo = null; return out; }
+            long mod = f.lastModified(), len = f.length();
+            if (memo == null || mod != memoMod || len != memoLen || !f.getPath().equals(memoPath)) {
+                byte[] b = new byte[(int) len];
+                try (FileInputStream in = new FileInputStream(f)) { int n = 0; while (n < b.length) { int r = in.read(b, n, b.length - n); if (r < 0) break; n += r; } }
+                memo = parse(new String(b, StandardCharsets.UTF_8));
+                memoPath = f.getPath();
+                memoMod = mod;
+                memoLen = len;
             }
+            for (Match m : memo) out.add(m.copy());
         } catch (Exception ignored) { }
+        return out;
+    }
+
+    private static List<Match> parse(String text) throws Exception {
+        List<Match> out = new ArrayList<>();
+        JSONArray a = new JSONArray(text);
+        for (int i = 0; i < a.length(); i++) {
+            try {
+                JSONObject o = a.getJSONObject(i);
+                Match m = new Match();
+                m.club = o.optString("club"); m.team = o.optString("team"); m.source = o.optString("source");
+                m.key = o.optString("key"); m.comp = o.optString("comp"); m.league = o.optString("league");
+                m.home = o.optString("home"); m.away = o.optString("away"); m.clubIsHome = o.optBoolean("clubIsHome");
+                m.hs = o.isNull("hs") ? null : o.optString("hs", null); m.as = o.isNull("as") ? null : o.optString("as", null);
+                m.state = o.optString("state", "pre"); m.detail = o.optString("detail"); m.start = o.optLong("start");
+                m.tbd = o.optBoolean("tbd"); m.quarter = o.optInt("quarter"); m.clubWon = o.optInt("clubWon", 9);
+                m.pens = o.isNull("pens") ? null : o.optString("pens", null);
+                m.homeCrest = o.optString("homeCrest"); m.awayCrest = o.optString("awayCrest");
+                m.listedBy = o.optString("listedBy", "");
+                m.channel = o.optString("channel");
+                m.channelApp = o.has("channelApp") ? o.optString("channelApp") : Where.plain(m) ? null : Cards.MAGENTA;
+                m.channelNo = o.optInt("channelNo"); m.channelLogo = o.isNull("channelLogo") ? null : o.optString("channelLogo", null);
+                m.channelSure = o.optBoolean("channelSure"); m.channelKnown = o.optBoolean("channelKnown", true);
+                m.seenLiveAt = o.optLong("seenLiveAt");
+                if (!m.key.isEmpty() && !m.club.isEmpty() && m.start > 0) out.add(m);
+            } catch (Exception ignored) { }
+        }
         return out;
     }
 }

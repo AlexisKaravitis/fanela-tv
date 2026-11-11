@@ -2,7 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Debug only: the TV's own programme guide as a where-to-watch source (TvGuideProvider), granted by the viewer -->
     <uses-permission android:name="android.permission.READ_TV_LISTINGS" />
+    <!-- The in-app updater, so it is built and checked here (a release has it only with UPDATE_REPO set: src/updater) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application>
+        <receiver android:name=".AppUpdate$Result" android:exported="false" />
         <receiver android:name=".DebugReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="app.fanela.tv.DEMO" />

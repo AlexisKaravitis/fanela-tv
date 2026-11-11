@@ -75,7 +75,7 @@ final class I18n {
         // days and pills
         p("today", "Σήμερα", "Today"); p("tomorrow", "Αύριο", "Tomorrow"); p("yesterday", "Χθες", "Yesterday");
         p("final", "Τελικό", "Final"); p("win", "Νίκη", "Win"); p("draw", "Ισοπαλία", "Draw"); p("loss", "Ήττα", "Loss");
-        p("pens", "πέν.", "pens"); p("penalties", "Πέναλτι", "Penalties"); p("time_tba", "Ώρα: θα οριστεί", "Time TBA");
+        p("pens", "πέν.", "pens"); p("penalties", "Πέναλτι", "Penalties"); p("chip_aet", "Παράταση", "AET"); p("chip_pens", "Πέναλτι", "Pens"); p("chip_tba", "Θα οριστεί", "Time TBA"); p("time_tba", "Ώρα: θα οριστεί", "Time TBA");
         p("channel_tba", "Κανάλι: θα ανακοινωθεί", "Channel: to be announced"); p("likely", "Πιθανό", "Likely");
         p("not_updated", "⚠ Χωρίς ενημέρωση", "⚠ Not updated"); p("last_update", "τελευταία ενημέρωση", "last updated");
         p("on", "στο", "on"); p("likely_channel", "πιθανό", "likely"); p("likely_channel_cap", "Πιθανό", "Likely"); p("live", "LIVE", "LIVE");
@@ -96,7 +96,7 @@ final class I18n {
         p("uefa.europa.conf_qual", "Conference League · προκρ.", "Conference League · qual."); p("uefa.super_cup", "UEFA Super Cup", "UEFA Super Cup");
         p("club.friendly", "Φιλικό", "Friendly"); p("euroleague", "EuroLeague", "EuroLeague"); p("euroleague.po", "EuroLeague · Playoffs", "EuroLeague · Playoffs");
         p("euroleague.ff", "EuroLeague · Final Four", "EuroLeague · Final Four"); p("euroleague.pi", "EuroLeague · Play-In", "EuroLeague · Play-In");
-        p("eurocup", "EuroCup", "EuroCup"); p("gbl", "Basket League", "Basket League"); p("gbl.cup", "Κύπελλο μπάσκετ", "Basketball Cup");
+        p("eurocup", "EuroCup", "EuroCup"); p("gbl", "Basket League", "Basket League"); p("esp.acb", "Liga Endesa", "Liga Endesa"); p("ita.lba", "Lega Basket", "Lega Basket"); p("tur.bsl", "Basketbol Süper Ligi", "Basketbol Süper Ligi"); p("ger.bbl", "BBL", "BBL"); p("fra.proa", "Betclic Élite", "Betclic Élite"); p("aba", "ABA Liga", "ABA Liga"); p("gbl.cup", "Κύπελλο μπάσκετ", "Basketball Cup");
         p("bcl", "Basketball Champions League", "Basketball Champions League"); p("fiba.europe_cup", "FIBA Europe Cup", "FIBA Europe Cup");
         // leagues outside Greece (ESPN slugs) and their usual cups
         p("eng.1", "Premier League", "Premier League"); p("esp.1", "LaLiga", "LaLiga"); p("ita.1", "Serie A", "Serie A");
@@ -113,8 +113,8 @@ final class I18n {
         p("afc.champions", "AFC Champions League", "AFC Champions League");
         // home screen
         p("app", "Fanela", "Fanela"); p("settings", "Ρυθμίσεις", "Settings");
-        p("updated", "Ενημέρωση: %s", "Updated %s"); p("updating", "Ενημέρωση…", "Updating…");
-        p("offline", "Χωρίς σύνδεση με τον διακομιστή αποτελεσμάτων. Βλέπεις τα αποθηκευμένα.", "Can't reach the score service. Showing saved fixtures.");
+        p("updated", "Ενημερώθηκε %s", "Updated %s"); p("updating", "Ενημερώνεται…", "Updating…");
+        p("offline", "Χωρίς σύνδεση · αποθηκευμένο πρόγραμμα", "Offline · showing saved fixtures");
         p("empty_title", "Ακολούθησε τις ομάδες σου", "Follow your clubs");
         p("empty_text", "Διάλεξε τις ομάδες που υποστηρίζεις και θα βλέπεις εδώ τον επόμενο αγώνα, το σκορ και σε ποιο κανάλι παίζει.",
             "Pick the clubs you support. You'll see their next match, the score and which channel it's on, right here.");
@@ -127,15 +127,15 @@ final class I18n {
         p("close", "Κλείσιμο", "Close");
         p("channel_note", "Αναμενόμενο κανάλι, με βάση τα τηλεοπτικά δικαιώματα της γηπεδούχου. Επιβεβαίωσέ το στον οδηγό του παρόχου σου.",
             "Expected channel, based on the home team's TV rights. Check your provider's guide to be sure.");
-        p("usually", "Συνήθως", "Usually on");
+        p("usually", "Πιθανό", "Likely");  // one hedge word everywhere, the season table included
         p("check_guide", "Δες τον οδηγό του παρόχου σου", "Check your provider's guide");
         p("selected", "επιλεγμένο", "selected");
         p("checked_title", "Τελευταίος έλεγχος με τις επίσημες σελίδες των διοργανώσεων:", "Last checked against the competitions' official pages:");
         p("no_official_list", "δεν δημοσιεύει λίστα για άλλες χώρες", "publishes no list for other countries");
         p("no_table_note", "Το Fanela δεν έχει ακόμη τους τηλεοπτικούς συνεργάτες αυτής της διοργάνωσης για τη χώρα σου.",
             "Fanela doesn't have this competition's TV partners for your country yet.");
-        p("usually_on", "συνήθως: %s", "usually on %s"); p("usually_on_cap", "Συνήθως: %s", "Usually on %s");
-        p("on_channels", "κανάλι: %s", "on %s"); p("on_channels_cap", "Κανάλι: %s", "On %s");
+        p("usually_on", "πιθανό στο %s", "likely on %s"); p("usually_on_cap", "Πιθανό στο %s", "Likely on %s");
+        p("on_channels", "στο %s", "on %s"); p("on_channels_cap", "Στο %s", "On %s"); p("or", "ή", "or"); p("channel_no", "κανάλι %s", "ch. %s");
         p("table_note", "Από τη λίστα τηλεοπτικών συνεργατών της διοργάνωσης για αυτή τη σεζόν. Το ακριβές κανάλι θα το βρεις στον οδηγό του παρόχου σου.",
             "From the competition's list of TV partners for this season. Your provider's guide will have the exact channel.");
         // settings
@@ -148,7 +148,7 @@ final class I18n {
         p("tv_country", "Η χώρα της τηλεόρασης", "This TV's country");
         p("fixtures_only", "Μόνο πρόγραμμα και σκορ, χωρίς κανάλια", "Fixtures and scores only, no TV info");
         p("tv_country_fixtures_only", "Η χώρα της τηλεόρασης · μόνο πρόγραμμα και σκορ", "This TV's country · fixtures and scores only");
-        p("language_title", "Γλώσσα", "Language"); p("done", "Τέλος", "Done");
+        p("language_title", "Γλώσσα", "Language"); p("done", "Έτοιμο", "Done"); p("skip", "Παράλειψη", "Skip for now");
         p("favourite", "Αγαπημένη ομάδα", "Favourite club");
         p("favourite_hint", "Το Fanela παίρνει τα χρώματά της", "Fanela takes on its colours");
         p("country", "Χώρα", "Country");
@@ -174,7 +174,7 @@ final class I18n {
             "Fixtures and scores: ESPN, EuroLeague, TheSportsDB. Channels and crests: the MagentaTV and Sport24 TV guides, SofaScore. Outside Greece: the TV partner lists the leagues and UEFA publish. Times and channels can change. Font: Google Sans (SIL Open Font License).");
         p("sources_store", "Πρόγραμμα και σκορ: ESPN, EuroLeague, TheSportsDB. Κανάλια: τα τηλεοπτικά δικαιώματα κάθε ομάδας για τη σεζόν και, εκτός Ελλάδας, οι λίστες τηλεοπτικών συνεργατών των διοργανώσεων. Οι ώρες και τα κανάλια μπορεί να αλλάξουν.",
             "Fixtures and scores: ESPN, EuroLeague, TheSportsDB. Channels: each club's TV rights for the season and, outside Greece, the leagues' lists of TV partners. Times and channels can change.");
-        p("privacy", "Απόρρητο", "Privacy"); p("read", "Ανάγνωση", "Read");
+        p("privacy", "Απόρρητο", "Privacy"); p("read", "Προβολή", "Read");
         p("credits", "Πηγές και ευχαριστίες", "Sources and credits");
         p("credits_short", "Από πού έρχονται το πρόγραμμα, τα σκορ και τα κανάλια", "Where fixtures, scores and channels come from");
         p("credits_full",
@@ -196,11 +196,13 @@ final class I18n {
         p("back_to_close", "Πάτα Πίσω για κλείσιμο.", "Press Back to close.");
         p("version", "Έκδοση %s", "Version %s"); p("in_days", "σε %d ημέρες", "in %d days"); p("in_hours", "σε %d ώρες", "in %d hours"); p("in_minutes", "σε %d λεπτά", "in %d minutes"); p("in_minute", "σε 1 λεπτό", "in 1 minute");
         p("updates", "Ενημερώσεις εφαρμογής", "App updates"); p("up_to_date", "Ενημερωμένη", "Up to date");
+        p("releases_info", "Ενημερώσεις: εγκατάσταση νέων εκδόσεων από τη σελίδα Releases", "App updates: install new versions from the Releases page");
+        p("language_hint", "Τα κείμενα του Fanela· τα ονόματα των ομάδων ακολουθούν", "Fanela's own text; club names follow it");
         p("install_version", "Εγκατάσταση %s", "Install %s"); p("update_available", "Νέα έκδοση στις Ρυθμίσεις", "Update ready in Settings");
         p("update_downloading", "Λήψη της νέας έκδοσης…", "Downloading the update…");
         p("update_failed", "Η ενημέρωση δεν ολοκληρώθηκε. Δοκίμασε ξανά αργότερα.", "The update didn't finish. Try again later.");
         p("update_bad_sig", "Η ενημέρωση απορρίφθηκε: δεν έχει την υπογραφή του Fanela.", "Update rejected: it isn't signed by Fanela.");
-        p("yes", "Ενεργό", "On"); p("no", "Ανενεργό", "Off"); p("status", "Τελευταία ενημέρωση", "Last updated"); p("never", "ποτέ", "never"); p("never_updated", "Δεν έχει ενημερωθεί ακόμη", "Not updated yet");
+        p("yes", "Ενεργό", "On"); p("no", "Ανενεργό", "Off"); p("status", "Κατάσταση", "Status"); p("never", "ποτέ", "never"); p("never_updated", "Δεν έχει ενημερωθεί ακόμη", "Not updated yet");
         p("following", "Ακολουθείς", "Following"); p("not_following", "Δεν ακολουθείς", "Not following");
         p("enable_row", "Για να δεις τη σειρά «%s»: Αρχική οθόνη > Προσαρμογή καναλιών", "To see the \"%s\" row: Home screen > Customise channels");
         p("row_hidden", "%s · δεν είναι στην αρχική οθόνη", "%s · not on the home screen");
@@ -250,7 +252,7 @@ final class I18n {
             {"Kifisia", "Κηφισιά"}, {"Panserraikos", "Πανσερραϊκός"}, {"Lamia", "Λαμία"}, {"Athens Kallithea", "Καλλιθέα"},
             {"Larissa", "Λάρισα"}, {"AEL Larissa", "ΑΕΛ"}, {"AEL", "ΑΕΛ"}, {"Maroussi", "Μαρούσι"}, {"Peristeri", "Περιστέρι"},
             {"Promitheas Patras", "Προμηθέας"}, {"Promitheas", "Προμηθέας"}, {"Kolossos Rodou", "Κολοσσός"}, {"Kolossos", "Κολοσσός"},
-            {"Lavrio", "Λαύριο"}, {"Karditsa", "Καρδίτσα"}, {"Panionios", "Πανιώνιος"}, {"Apollon Patras", "Απόλλων Π."},
+            {"Lavrio", "Λαύριο"}, {"Karditsa", "Καρδίτσα"}, {"ASK Karditsas", "Καρδίτσα"}, {"Panionios", "Πανιώνιος"}, {"Apollon Patras", "Απόλλων Π."},
             {"Mykonos", "Μύκονος"}, {"Vikos Falcons", "Βίκος"}, {"Doxa Lefkadas", "Δόξα Λευκάδας"}, {"Psychiko", "Ψυχικό"},
             {"Panathinaikos AKTOR", "Παναθηναϊκός"}, {"Aris Midea", "Άρης"}, {"Kolossos H Hotels", "Κολοσσός"}, {"Elefsina", "Ελευσίνα"},
             {"Rethymno", "Ρέθυμνο"}, {"Ifaistos Limnou", "Ήφαιστος Λήμνου"}, {"Iraklis BC", "Ηρακλής"}, {"PAS Giannina", "ΠΑΣ Γιάννινα"}, {"Ionikos", "Ιωνικός"},
@@ -458,7 +460,7 @@ final class I18n {
     static {
         String[][] pairs = {
             {"AEK Athens", "AEK"}, {"Olympiacos Piraeus", "Olympiacos"}, {"PAOK Thessaloniki", "PAOK"},
-            {"Panathinaikos Athens", "Panathinaikos"}, {"Aris Thessaloniki", "Aris"},
+            {"Panathinaikos Athens", "Panathinaikos"}, {"Aris Thessaloniki", "Aris"}, {"ASK Karditsas", "Karditsa"},
             {"Manchester United", "Man United"}, {"Manchester City", "Man City"}, {"Tottenham Hotspur", "Spurs"},
             {"Newcastle United", "Newcastle"}, {"Nottingham Forest", "Nott'm Forest"}, {"Brighton & Hove Albion", "Brighton"},
             {"AFC Bournemouth", "Bournemouth"}, {"Wolverhampton Wanderers", "Wolves"}, {"West Ham United", "West Ham"},

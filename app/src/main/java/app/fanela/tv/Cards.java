@@ -22,7 +22,7 @@ import java.util.Set;
 final class Cards {
     static final String MAGENTA = "gr.cosmote.cosmotetv.androidtv", EON = "com.ug.eon.android.tv",
         SPORTFM = "gr.sportfmtv.app", ANT1 = "gr.antenna.ant1.screen";
-    static final int CARD_VERSION = 10;  // bump when the drawing changes: every card is redrawn once
+    static final int CARD_VERSION = 13;  // bump when the drawing changes: every card is redrawn once
 
     // ---------- where to watch (best guess until a TV guide confirms it) ----------
     /** Greek TV rights. Football / Basket League: 2026-27. EuroLeague + EuroCup: Nova until the end of 2027-28. */
@@ -63,23 +63,49 @@ final class Cards {
 
     static String where(Match m) { return where(m, false); }
 
-    /** Where to watch. lineStart: the text starts a line (capital first letter), not mid-sentence. */
+    /**
+     * Where to watch, in words. One pattern: the hedge word for a guess, the channels ("or" between guesses, "/"
+     * between confirmed ones), then after a "·" the number and the app: "Novasports 4 · ch. 325 on Magenta TV",
+     * "Likely Magenta Sport or MEGA · on Magenta TV"; abroad "Likely on Sky Sports or TNT Sports", "On Sky Sports 402".
+     * lineStart: the text starts a line (capital first letter), not mid-sentence.
+     */
     static String where(Match m, boolean lineStart) {
         if (!m.channelKnown) return I18n.t(Where.noData(m) ? "check_guide" : "channel_tba");
-        if (Where.plain(m)) {  // "Usually on Sky Sports / TNT Sports" (season table), "On Sky Sports Main Event" (a listing)
-            String names = String.join(" / ", names(m));
+        WhereParts w = whereParts(m);
+        String names = String.join(m.channelSure ? " / " : " " + I18n.t("or") + " ", w.channels);
+        if (w.app == null) {  // a season table or a listing: no app of its own
+            if (w.no > 0) names += " " + w.no;
             return I18n.f((m.channelSure ? "on_channels" : "usually_on") + (lineStart ? "_cap" : ""), names);
         }
-        // one pattern everywhere: "Novasports Prime 318 · Magenta TV", or "Likely: Magenta Sport · Magenta TV"
-        if (m.channelSure) return chan(m.channel) + (m.channelNo > 0 ? " " + m.channelNo : "") + " · " + appName(m.channelApp);
-        return I18n.t(lineStart ? "likely_channel_cap" : "likely_channel") + ": " + chan(m.channel) + " · " + appName(m.channelApp);
+        String tail = (w.no > 0 ? I18n.f("channel_no", w.no) + " " : "") + I18n.t("on") + " " + w.app;
+        return (m.channelSure ? "" : I18n.t(lineStart ? "likely_channel_cap" : "likely_channel") + " ") + names + " · " + tail;
     }
 
-    /** The channels of a match, one name each ("Sky Sports · TNT Sports"), at most three; the TV's own guide adds the number. */
-    static List<String> names(Match m) {
+    /** The pieces of where(): the hedge word ("" when confirmed), the channels, the channel number (0: none), the app (null abroad). */
+    static final class WhereParts {
+        String lead; List<String> channels; int no; String app;
+    }
+
+    static WhereParts whereParts(Match m) {
+        WhereParts w = new WhereParts();
+        w.lead = m.channelSure || !m.channelKnown ? "" : I18n.t("likely");
+        w.channels = channels(m);
+        w.no = m.channelSure && m.channelNo > 0 && (!Where.plain(m) || "tv".equals(m.listedBy)) ? m.channelNo : 0;
+        w.app = Where.plain(m) ? null : appName(m.channelApp);
+        return w;
+    }
+
+    /** The channels of a match, one name each, at most three, in the interface's letters; no numbers. */
+    static List<String> channels(Match m) {
         List<String> out = new ArrayList<>();
         if (m.channel == null) return out;
         for (String s : m.channel.split("\\s*·\\s*")) if (!s.trim().isEmpty() && out.size() < 3) out.add(chan(s.trim()));
+        return out;
+    }
+
+    /** The channels as the match panel's pills show them: the TV's own guide adds its number to the first. */
+    static List<String> names(Match m) {
+        List<String> out = channels(m);
         if ("tv".equals(m.listedBy) && m.channelNo > 0 && !out.isEmpty()) out.set(0, out.get(0) + " " + m.channelNo);
         return out;
     }
@@ -146,7 +172,10 @@ final class Cards {
 
     // ---------- drawing ----------
     static final int W = 960, H = 540;
-    static final int LIVE_RED = Color.rgb(227, 38, 47), AMBER = Color.rgb(245, 166, 35);
+    /** One red for live and for a loss; the green and grey of the other result words; the card's secondary text. */
+    static final int RED = Color.rgb(232, 52, 60), AMBER = Color.rgb(245, 166, 35), GREEN = Color.rgb(61, 220, 132),
+        GREY = Color.rgb(176, 182, 192), SECONDARY = Color.rgb(206, 210, 218), LEAD = Color.rgb(214, 218, 226),
+        INK = Color.rgb(17, 17, 17), DIM = Color.argb(64, 255, 255, 255);
 
     /** The app font for a role: regular text, medium labels, bold names / scores / pills. */
     static Typeface face(String family, int style) {
@@ -154,20 +183,7 @@ final class Cards {
         return family.endsWith("medium") ? Ui.MEDIUM : Ui.REGULAR;
     }
 
-    static Bitmap appArt(Context c, String pkg) {
-        try {
-            android.graphics.drawable.Drawable d = c.getPackageManager().getApplicationBanner(pkg);
-            if (d == null) d = c.getPackageManager().getApplicationIcon(pkg);
-            int w = Math.max(1, d.getIntrinsicWidth()), h = Math.max(1, d.getIntrinsicHeight());
-            Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            d.setBounds(0, 0, w, h);
-            d.draw(new Canvas(b));
-            return b;
-        } catch (Throwable e) {
-            return null;
-        }
-    }
-
+    /** The logo without its transparent margins: the same bitmap when there are none, else a new one (the caller recycles both). */
     static Bitmap trim(Bitmap b) {
         if (b == null || !b.hasAlpha()) return b;
         int w = b.getWidth(), h = b.getHeight(), l = w, t = h, r = -1, bo = -1;
@@ -179,17 +195,29 @@ final class Cards {
         return Bitmap.createBitmap(b, l, t, r - l + 1, bo - t + 1);
     }
 
+    /** Halves a bitmap until it is near its drawn width (a cleaner downscale); the steps between are recycled, the source is not. */
     static Bitmap smooth(Bitmap b, float targetW) {
-        while (b.getWidth() / 2f >= targetW && b.getWidth() > 2) b = Bitmap.createScaledBitmap(b, b.getWidth() / 2, Math.max(1, b.getHeight() / 2), true);
-        return b;
+        Bitmap cur = b;
+        while (cur.getWidth() / 2f >= targetW && cur.getWidth() > 2) {
+            Bitmap next = Bitmap.createScaledBitmap(cur, cur.getWidth() / 2, Math.max(1, cur.getHeight() / 2), true);
+            if (cur != b) cur.recycle();
+            cur = next;
+        }
+        return cur;
+    }
+
+    /** Draws a bitmap scaled into r, leaving no temporary bitmap behind (the source stays the caller's). */
+    static void drawBitmap(Canvas cv, Bitmap b, RectF r, Paint paint) {
+        Bitmap s = smooth(b, r.width());
+        cv.drawBitmap(s, null, r, paint);
+        if (s != b) s.recycle();
     }
 
     static void drawBitmap(Canvas cv, Bitmap b, RectF r) {
-        cv.drawBitmap(smooth(b, r.width()), null, r, new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG));
+        drawBitmap(cv, b, r, new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG));
     }
 
-    static void badge(Canvas cv, Bitmap crest, String raw, float cx, float cy) { badge(cv, crest, raw, cx, cy, 92); }
-
+    /** The crest on a white disc with a soft shadow and a faint rim; the crest bitmap is recycled once drawn. */
     static void badge(Canvas cv, Bitmap crest, String raw, float cx, float cy, float r) {
         if (crest == null) { Badges.draw(cv, raw, cx, cy, r); return; }
         Paint sh = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -199,14 +227,21 @@ final class Cards {
         float box = r * 132 / 92, sc = Math.min(box / crest.getWidth(), box / crest.getHeight());
         float w = crest.getWidth() * sc, h = crest.getHeight() * sc;
         drawBitmap(cv, crest, new RectF(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2));
+        crest.recycle();
+        Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
+        rim.setStyle(Paint.Style.STROKE);
+        rim.setStrokeWidth(2);
+        rim.setColor(Color.argb(36, 0, 0, 0));
+        cv.drawCircle(cx, cy, r - 1, rim);
     }
 
-    static float pill(Canvas cv, float x, float y, String text, int bg, int fg, boolean dot, boolean alignRight, float maxW) {
+    /** A rounded chip; its text shrinks to fit maxW (never below 28 px). Returns the chip's width. */
+    static float pill(Canvas cv, float x, float y, float h, float size, String text, int bg, int fg, boolean dot, boolean alignRight, float maxW) {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setTypeface(face("sans-serif", Typeface.BOLD));
-        float size = 40, pad = 26, dotw = dot ? 30 : 0, h = 66;
+        float pad = 28, dotw = dot ? 30 : 0;
         p.setTextSize(size);
-        while (p.measureText(text) + 2 * pad + dotw > maxW && size > 24) p.setTextSize(size -= 2);
+        while (p.measureText(text) + 2 * pad + dotw > maxW && size > 28) p.setTextSize(size -= 2);
         float w = p.measureText(text) + 2 * pad + dotw;
         if (alignRight) x = x - w;
         Paint bgp = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -214,31 +249,67 @@ final class Cards {
         cv.drawRoundRect(new RectF(x, y, x + w, y + h), h / 2, h / 2, bgp);
         p.setColor(fg);
         if (dot) cv.drawCircle(x + pad + 7, y + h / 2, 7, p);
-        Rect r = new Rect();
-        p.getTextBounds("Α", 0, 1, r);
-        cv.drawText(text, x + pad + dotw, y + h / 2 + r.height() / 2f, p);
+        cv.drawText(text, x + pad + dotw, y + h / 2 + capHeight(p) / 2, p);
         return w;
     }
 
+    /** A warning sign the height of a capital: a filled amber triangle with an ink "!", drawn at (x, baseline). */
+    static void warning(Canvas cv, float x, float baseline, float cap, Paint like) {
+        float w = cap * 1.12f, top = baseline - cap;
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setColor(AMBER);
+        android.graphics.Path t = new android.graphics.Path();
+        t.moveTo(x + w / 2, top); t.lineTo(x + w, baseline); t.lineTo(x, baseline); t.close();
+        cv.drawPath(t, p);
+        p.setColor(INK);
+        float bx = x + w / 2, bw = Math.max(2, cap * 0.14f);
+        cv.drawRect(bx - bw / 2, top + cap * 0.34f, bx + bw / 2, baseline - cap * 0.30f, p);
+        cv.drawCircle(bx, baseline - cap * 0.17f, bw * 0.72f, p);
+    }
+
+    /** The height of a capital in the paint's size: text is centred on its caps, not on its descenders. */
+    static float capHeight(Paint p) {
+        Rect r = new Rect();
+        p.getTextBounds("H", 0, 1, r);
+        return r.height();
+    }
+
     /**
-     * Both club names in one size, the largest both fit at, never below 30 px: a longer name goes onto two lines
-     * instead of shrinking out of reach from the sofa.
+     * Both club names, always in the same size. At the base size a name that fits stays on one line. A longer name
+     * first takes both names down together, by 2 px steps, to the floor (one calm line beats two); only then
+     * does it break into two lines at the space nearest its middle, the second line hanging below the first so the
+     * first lines of both names stay aligned. Below 30 px nothing shrinks further: a single word is squeezed alone.
      */
-    static void drawNames(Canvas cv, Paint p, String home, String away, float y, float maxW, float size) {
-        p.setTextSize(size);
-        while (Math.max(p.measureText(home), p.measureText(away)) > maxW && size > 30) p.setTextSize(size -= 2);
-        p.setTextAlign(Paint.Align.CENTER);
-        String[][] both = {{home, "190"}, {away, "770"}};
-        for (String[] n : both) {
-            float cx = Float.parseFloat(n[1]);
-            int sp = n[0].indexOf(' ', n[0].length() / 2) >= 0 ? n[0].indexOf(' ', n[0].length() / 2) : n[0].lastIndexOf(' ');
-            if (p.measureText(n[0]) <= maxW || sp < 0) { fitText(cv, p, n[0], cx, y, maxW, size); p.setTextAlign(Paint.Align.CENTER); continue; }
-            float lh = size * 1.02f;  // two lines, the first a little higher
-            fitText(cv, p, n[0].substring(0, sp), cx, y - lh / 2, maxW, size);
-            fitText(cv, p, n[0].substring(sp + 1), cx, y + lh / 2, maxW, size);
-            p.setTextAlign(Paint.Align.CENTER);
+    static void drawNames(Canvas cv, Paint p, String home, String away, float y, float maxW, float size, float floor) {
+        String[][] lines;
+        for (;; size -= 2) {
+            p.setTextSize(size);
+            lines = new String[][]{split(p, home, maxW, size <= floor), split(p, away, maxW, size <= floor)};
+            boolean fit = true;
+            for (String[] n : lines) for (String l : n) if (p.measureText(l) > maxW) fit = false;
+            if (fit || size <= 30) break;
         }
-        p.setTextAlign(Paint.Align.LEFT);
+        float[] cx = {190, 770};
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < lines[i].length; j++) fitText(cv, p, lines[i][j], cx[i], y + j * size * 0.88f, maxW, size);  // caps: tight lines
+    }
+
+    /** One line if it fits (or wrapping is off), else two at the space nearest the middle; a single word stays one line. */
+    static String[] split(Paint p, String s, float maxW, boolean wrap) {
+        if (!wrap || p.measureText(s) <= maxW) return new String[]{s};
+        int best = -1;
+        for (int i = s.indexOf(' '); i >= 0; i = s.indexOf(' ', i + 1))
+            if (best < 0 || Math.abs(i - s.length() / 2) < Math.abs(best - s.length() / 2)) best = i;
+        if (best < 0) return new String[]{s};
+        return new String[]{s.substring(0, best), s.substring(best + 1)};
+    }
+
+    /** The text that fits in maxW, cut with an ellipsis when it does not (the paint's size is kept). */
+    static String ellipsize(Paint p, String s, float maxW) {
+        if (p.measureText(s) <= maxW) return s;
+        int n = s.length();
+        while (n > 1 && p.measureText(s.substring(0, n).trim() + "…") > maxW) n--;
+        return s.substring(0, n).trim() + "…";
     }
 
     static void fitText(Canvas cv, Paint p, String s, float cx, float y, float maxW, float size) {
@@ -253,18 +324,16 @@ final class Cards {
      * The kick-off time between the crests: the digits large, "pm" / "μ.μ." half their size on the same baseline, so the
      * time never has to shrink to fit (it stays clear of both crests).
      */
-    static void drawTime(Canvas cv, Paint p, String t, float cx, float y) { drawTime(cv, p, t, cx, y, 112); }
-
     static void drawTime(Canvas cv, Paint p, String t, float cx, float y, float big) {
         int sp = t.indexOf(' ');
-        if (sp < 0) { fitText(cv, p, t, cx, y, 340, big); return; }
+        if (sp < 0) { fitText(cv, p, t, cx, y, 316, big); return; }
         String digits = t.substring(0, sp), suffix = t.substring(sp + 1);
         float small = big * 0.46f, gap = 10;
         p.setTextSize(big);
         float wd = p.measureText(digits);
         p.setTextSize(small);
         float ws = p.measureText(suffix), total = wd + gap + ws;
-        float k = total > 340 ? 340 / total : 1;
+        float k = total > 316 ? 316 / total : 1;
         float x = cx - total * k / 2;
         p.setTextAlign(Paint.Align.LEFT);
         p.setTextSize(big * k);
@@ -283,9 +352,17 @@ final class Cards {
     /** The card at full size (960x540), e.g. for the match screen. */
     static Bitmap draw(Context c, Match m, boolean stale) { return draw(c, m, stale, false); }
 
+    /** The word in the chip of a result: FINAL, or AET / PENS when the match went that far (the result line has the score). */
+    static String chipFinal(Match m) {
+        return "FT_AET".equals(m.detail) ? I18n.t("chip_aet") : "FT_PEN".equals(m.detail) ? I18n.t("chip_pens") : I18n.t("final");
+    }
+
     /**
-     * tv: the card for the TV's home screen, where it is shown about 290 px wide: no competition line (the tile's own
-     * text has it), and larger crests, names, time and channels, so it reads from the sofa.
+     * One design in two sizes. The card is drawn at 960x540 and shown at 480x270 in the app's own home screen and at
+     * about 408x230 on the TV's home screen (tv). Both carry the same layout: competition top left, date / status chip
+     * top right, the crests with the time or score between them, both team names in one size, the channel strip or
+     * the result word. The TV tile is 15 % smaller on screen, so its type and crests are set larger by about as much
+     * (x1.18 for the secondary text, a little less for the names, which should not shout); nothing else differs.
      */
     static Bitmap draw(Context c, Match m, boolean stale, boolean tv) {
         Ui.fonts(c);
@@ -295,226 +372,196 @@ final class Cards {
         boolean awaiting = "AWAITING".equals(m.detail);  // no live feed and past the usual end: not shown as live
         boolean live = live(m), done = "post".equals(m.state), off = "off".equals(m.state) || "SUSPENDED".equals(m.detail);
 
-        cv.drawColor(done ? Color.rgb(26, 28, 33) : Color.rgb(32, 35, 41));
-        p.setShader(new LinearGradient(0, 0, 0, H * 0.6f, Color.argb(20, 255, 255, 255), Color.argb(0, 255, 255, 255), Shader.TileMode.CLAMP));
-        cv.drawRect(0, 0, W, H, p);
+        // the surface: a shade lighter than the launchers behind it, a faint rim, a top highlight on upcoming cards only
+        cv.drawColor(done ? Color.rgb(38, 41, 48) : Color.rgb(44, 48, 56));
+        if (!done) {
+            p.setShader(new LinearGradient(0, 0, 0, H * 0.6f, Color.argb(32, 255, 255, 255), Color.argb(0, 255, 255, 255), Shader.TileMode.CLAMP));
+            cv.drawRect(0, 0, W, H, p);
+        }
         if (live) {
             p.setShader(new android.graphics.RadialGradient(480, 250, 420, Color.argb(140, 200, 16, 46), Color.argb(0, 200, 16, 46), Shader.TileMode.CLAMP));
             cv.drawRect(0, 0, W, H, p);
         }
         p.setShader(null);
+        Paint rim = new Paint();
+        rim.setStyle(Paint.Style.STROKE);
+        rim.setStrokeWidth(2);
+        rim.setColor(Color.argb(28, 255, 255, 255));
+        cv.drawRect(1, 1, W - 1, H - 1, rim);
 
+        // top right: the date or the state. White for today and tomorrow, red with a dot while live; a match that is
+        // off keeps its date here and says why at the bottom, where a result would be
         String status;
         int sBg, sFg;
         boolean dot = false;
-        if (off) { status = caps(I18n.detail(m.detail)); sBg = AMBER; sFg = Color.rgb(17, 17, 17); }
-        else if (awaiting) { status = caps(I18n.detail(m.detail)); sBg = Color.argb(46, 255, 255, 255); sFg = Color.rgb(230, 232, 236); }
-        else if (live) { status = m.detail == null || m.detail.isEmpty() ? "LIVE" : caps(I18n.detail(m.detail)); sBg = LIVE_RED; sFg = Color.WHITE; dot = true; }
-        else if (done) { status = caps(finalWord(m)) + " · " + caps(I18n.day(m.start)); sBg = Color.argb(46, 255, 255, 255); sFg = Color.rgb(230, 232, 236); }
-        else if ("DELAYED".equals(m.detail)) { status = caps(I18n.detail(m.detail)); sBg = AMBER; sFg = Color.rgb(17, 17, 17); }
+        if (off) { status = caps(I18n.day(m.start)); sBg = DIM; sFg = SECONDARY; }
+        else if (awaiting) { status = caps(I18n.detail(m.detail)); sBg = DIM; sFg = SECONDARY; }
+        else if (live) {
+            // the clock or the phase; "LIVE" itself only when the feed gave neither (on the TV tile the launcher's own
+            // badge already says LIVE, so the chip says "in progress" there)
+            status = m.detail == null || m.detail.isEmpty() ? (tv ? caps(I18n.detail("IN_PROGRESS")) : "LIVE") : caps(I18n.detail(m.detail));
+            sBg = RED; sFg = Color.WHITE; dot = true;
+        }
+        else if (done) { status = caps(chipFinal(m)) + " · " + caps(I18n.day(m.start)); sBg = DIM; sFg = SECONDARY; }
+        else if ("DELAYED".equals(m.detail)) { status = caps(I18n.detail(m.detail)); sBg = AMBER; sFg = INK; }
         else {
-            // a white chip only when the match is today or tomorrow; later dates are quiet, so the time stays the main thing
             String day = I18n.day(m.start);
             boolean soon = !m.tbd && (day.equals(I18n.t("today")) || day.equals(I18n.t("tomorrow")));
-            status = m.tbd ? caps(I18n.t("time_tba")) : caps(day);
-            sBg = soon ? Color.WHITE : Color.argb(46, 255, 255, 255);
-            sFg = soon ? Color.rgb(17, 17, 17) : Color.rgb(230, 232, 236);
+            status = m.tbd ? caps(I18n.t("chip_tba")) : caps(day);
+            sBg = soon ? Color.WHITE : DIM;
+            sFg = soon ? INK : SECONDARY;
         }
-        float pw = pill(cv, W - 32, 32, status, sBg, sFg, dot, true, 520);
-        String label = stale ? caps(I18n.t("not_updated")) : caps(I18n.comp(m.comp)) + (off || m.tbd ? " · " + caps(I18n.day(m.start)) : "");
-        p.setColor(stale ? AMBER : Color.rgb(174, 180, 191));
-        p.setTypeface(face("sans-serif-medium", Typeface.NORMAL));
-        p.setTextSize(34);
-        float lmax = W - 32 - pw - 36 - 24;
-        while (p.measureText(label) > lmax && p.getTextSize() > 20) p.setTextSize(p.getTextSize() - 2);
-        if (!tv || stale || off || m.tbd) cv.drawText(label, 36, 78, p);  // postponed / TBA: the line carries the date
+        float ph = 72;
+        float pw = pill(cv, W - 36, 30, ph, tv ? 46 : 44, status, sBg, sFg, dot, true, 520);
 
-        float cr = tv ? 106 : 92;
-        badge(cv, Net.image(c, m.homeCrest), m.home, 190, 228, cr);
-        badge(cv, Net.image(c, m.awayCrest), m.away, 770, 228, cr);
+        // top left: the competition, on both variants; TBA: with the date, which the chip gave up. Stale: an amber
+        // warning sign (drawn, not a fallback-font glyph) and "not updated" instead
+        String label = stale ? caps(I18n.t("not_updated").replace("\u26a0", "").trim()) : caps(I18n.comp(m.comp)) + (m.tbd ? " · " + caps(I18n.day(m.start)) : "");
+        p.setColor(stale ? AMBER : SECONDARY);
+        p.setTypeface(face("sans-serif-medium", Typeface.NORMAL));
+        p.setTextSize(tv ? 44 : 38);
+        float lx = 36, lmax = W - 36 - pw - 36 - 28;
+        while (p.measureText(label) > lmax && p.getTextSize() > (tv ? 36 : 32)) p.setTextSize(p.getTextSize() - 2);  // a little smaller, then cut
+        float cap = capHeight(p), ly = 30 + ph / 2 + cap / 2;  // its caps centred on the chip
+        if (stale) { warning(cv, lx, ly, cap, p); lx += cap * 1.12f + 14; lmax -= cap * 1.12f + 14; }
+        cv.drawText(ellipsize(p, label, lmax), lx, ly, p);
+
+        float cy = 228, cr = tv ? 96 : 92;
+        badge(cv, Net.image(c, m.homeCrest), m.home, 190, cy, cr);
+        badge(cv, Net.image(c, m.awayCrest), m.away, 770, cy, cr);
         p.setColor(Color.WHITE);
         p.setTypeface(face("sans-serif-condensed", Typeface.BOLD));
-        if (Where.greek(Where.country())) {  // Greece: exactly as Fanela 1.0 draws them
-            fitText(cv, p, caps(I18n.shortTeam(m.home)), 190, tv ? 392 : 372, tv ? 350 : 300, tv ? 54 : 38);
-            fitText(cv, p, caps(I18n.shortTeam(m.away)), 770, tv ? 392 : 372, tv ? 350 : 300, tv ? 54 : 38);
-        } else drawNames(cv, p, caps(I18n.shortTeam(m.home)), caps(I18n.shortTeam(m.away)), tv ? 392 : 372, tv ? 350 : 300, tv ? 54 : 38);
+        // one rule in both sizes: a name may fill about 8.4 em at the floor size before it breaks into two lines
+        drawNames(cv, p, caps(I18n.shortTeam(m.home)), caps(I18n.shortTeam(m.away)), tv ? 376 : 368, tv ? 320 : 300, tv ? 46 : 40, tv ? 38 : 36);
 
-        float cy = 228;
         if (m.hasScore() && (live || done)) {
             Paint s = new Paint(Paint.ANTI_ALIAS_FLAG);
             s.setTypeface(face("sans-serif-black", Typeface.NORMAL));
-            float size = tv ? 150 : 132;
+            float size = tv ? 156 : 132;
             s.setTextSize(size);
-            while (Math.max(s.measureText(m.hs), s.measureText(m.as)) > (tv ? 120 : 128) && size > 60) s.setTextSize(size -= 4);  // clear of the crests
-            Rect r = new Rect();
-            s.getTextBounds("0", 0, 1, r);
-            float base = cy + r.height() / 2f;
+            boolean wide = Math.max(m.hs.length(), m.as.length()) >= 3;  // basketball: closer to the dash, less shrinking
+            float half = wide ? 30 : 40, limit = wide ? 150 : 128;
+            while (Math.max(s.measureText(m.hs), s.measureText(m.as)) > limit && size > 60) s.setTextSize(size -= 4);  // clear of the crests
+            float base = cy + capHeight(s) / 2;
             Paint dash = new Paint(Paint.ANTI_ALIAS_FLAG);
-            dash.setColor(Color.argb(200, 255, 255, 255));
+            dash.setColor(Color.argb(done ? 150 : 200, 255, 255, 255));  // never outranking a dimmed loser's score
             cv.drawRect(468, cy - 5, 492, cy + 5, dash);
             int res = m.result();
             boolean dimHome = done && res != 9 && (m.clubHome() ? res < 0 : res > 0);
             boolean dimAway = done && res != 9 && (m.clubHome() ? res > 0 : res < 0);
-            s.setColor(Color.argb(dimHome ? 140 : 255, 255, 255, 255));
+            s.setColor(Color.argb(dimHome ? 160 : 255, 255, 255, 255));
             s.setTextAlign(Paint.Align.RIGHT);
-            cv.drawText(m.hs, 480 - 40, base, s);
-            s.setColor(Color.argb(dimAway ? 140 : 255, 255, 255, 255));
+            cv.drawText(m.hs, 480 - half, base, s);
+            s.setColor(Color.argb(dimAway ? 160 : 255, 255, 255, 255));
             s.setTextAlign(Paint.Align.LEFT);
-            cv.drawText(m.as, 480 + 40, base, s);
-        } else if (live) {
+            cv.drawText(m.as, 480 + half, base, s);
+        } else if (live) {  // in play, no score from the feed: the word stands in for the score
             p.setTypeface(face("sans-serif-black", Typeface.NORMAL));
             p.setColor(Color.WHITE);
-            fitText(cv, p, "LIVE", W / 2f, cy + 36, 300, 100);
-        } else {
+            fitText(cv, p, "LIVE", W / 2f, cy + 36, 300, tv ? 112 : 100);
+        } else {  // the kick-off time: faded when the match is off, "–:–" softened while the time is unknown
             p.setTypeface(face("sans-serif", Typeface.NORMAL));
-            p.setColor(off ? Color.argb(110, 255, 255, 255) : Color.WHITE);
-            drawTime(cv, p, m.tbd ? "–:–" : I18n.time(m.start), W / 2f, cy + (tv ? 46 : 40), tv ? 130 : 112);
-            if (off) { Paint st = new Paint(); st.setColor(AMBER); cv.drawRect(330, cy - 2, 630, cy + 6, st); }
+            p.setColor(off ? Color.argb(90, 255, 255, 255) : m.tbd ? Color.argb(153, 255, 255, 255) : Color.WHITE);
+            drawTime(cv, p, m.tbd ? "–:–" : I18n.time(m.start), W / 2f, cy + (tv ? 46 : 40), tv ? 132 : 112);
         }
 
         if (done) {
             int r = m.result();
             if (r != 9) {
                 p.setTypeface(face("sans-serif-black", Typeface.NORMAL));
-                p.setColor(r > 0 ? Color.rgb(61, 220, 132) : r == 0 ? Color.rgb(176, 182, 192) : Color.rgb(255, 90, 95));
+                p.setColor(r > 0 ? GREEN : r == 0 ? GREY : RED);
+                p.setLetterSpacing(0.04f);
                 String word = caps(I18n.t(r > 0 ? "win" : r == 0 ? "draw" : "loss")) + (m.pens != null ? " · " + caps(I18n.t("penalties")) + " " + m.pens : "");
-                fitText(cv, p, word, W / 2f, tv ? 484 : 472, 700, tv ? 56 : 42);
+                fitText(cv, p, word, W / 2f, tv ? 489 : 487, 760, tv ? 54 : 48);  // on the channel strips' centre line
+                p.setLetterSpacing(0);
             }
-        } else if (!off && !awaiting) {
+        } else if (off) {  // POSTPONED, CANCELLED, SUSPENDED: in amber where a result would be
+            p.setTypeface(face("sans-serif-black", Typeface.NORMAL));
+            p.setColor(AMBER);
+            p.setLetterSpacing(0.04f);
+            fitText(cv, p, caps(I18n.detail(m.detail)), W / 2f, tv ? 489 : 487, 760, tv ? 54 : 48);
+            p.setLetterSpacing(0);
+        } else if (!awaiting) {
             drawWhere(c, cv, m, tv);
         }
         return b;
     }
 
     /**
-     * The bottom line of an upcoming card: the channel logo(s) with their numbers ("Magenta Sport 1 League 301",
-     * "ΣΠΟΡ FM TV 1 · ΣΚΑΪ 110"), "Likely" in front when it is a guess; text when no logo is available yet.
+     * The bottom strip of an upcoming card, one grammar for every source: [LIKELY] [channel]+ [number]. A channel is
+     * its logo when Fanela has one (Greek guides and networks, listings that gave one), else its name in a text pill;
+     * a known channel number follows in a box. A guess is led by the hedge word and drawn a little softer. Without a
+     * channel: the honest text ("to be announced" in Greece, "check your guide" where Fanela has no data).
      */
-    static void drawWhere(Context c, Canvas cv, Match m) { drawWhere(c, cv, m, false); }
-
     static void drawWhere(Context c, Canvas cv, Match m, boolean tv) {
+        float k = tv ? 1.18f : 1f;
         Paint t = new Paint(Paint.ANTI_ALIAS_FLAG);
+        t.setTypeface(face("sans-serif-medium", Typeface.NORMAL));
         if (!m.channelKnown) {
-            t.setTypeface(face("sans-serif-medium", Typeface.NORMAL));
-            t.setColor(Color.rgb(150, 156, 168));
-            boolean gr = Where.greek(Where.country());  // Greece: "to be announced" as Fanela 1.0 draws it
-            fitText(cv, t, caps(I18n.t(Where.noData(m) ? "check_guide" : "channel_tba")), W / 2f, tv ? 490 : gr ? 482 : 486, 860, tv ? 46 : gr ? 34 : 42);
+            t.setColor(SECONDARY);
+            fitText(cv, t, caps(I18n.t(Where.noData(m) ? "check_guide" : "channel_tba")), W / 2f, 484, 860, tv ? 40 : 36);
             return;
         }
+        List<String> names = channels(m);
         List<Channels.Logo> logos = Channels.logos(c, m);
-        if (Where.plain(m) && logos.isEmpty()) { drawPills(cv, m); return; }
-        List<Bitmap> imgs = new ArrayList<>();
-        for (Channels.Logo l : logos) {
-            Bitmap b = trim(Net.image(c, l.url));
-            if (b == null) { imgs.clear(); break; }  // not downloaded yet: text for now, redrawn when it arrives
-            imgs.add(b);
-        }
-        if (!imgs.isEmpty()) {
-            String likely = m.channelSure ? "" : caps(I18n.t("likely"));
-            Paint num = new Paint(Paint.ANTI_ALIAS_FLAG);
-            num.setTypeface(face("sans-serif", Typeface.BOLD));
-            num.setTextSize(44);
-            num.setColor(Color.WHITE);
-            t.setTypeface(face("sans-serif-medium", Typeface.NORMAL));
-            t.setTextSize(30);
-            t.setColor(Color.rgb(160, 166, 178));
-            float maxLogoW = imgs.size() > 1 ? 230 : 320, h0 = imgs.size() > 1 ? 50 : 58, gap = 34;
-            float[] w = new float[imgs.size()], h = new float[imgs.size()], bw = new float[imgs.size()];
-            float total = likely.isEmpty() ? 0 : t.measureText(likely) + 22;
-            for (int i = 0; i < imgs.size(); i++) {
-                float ratio = (float) imgs.get(i).getWidth() / imgs.get(i).getHeight();
-                h[i] = ratio < 2.2f ? h0 * 1.35f : h0; w[i] = h[i] * ratio;  // squarer logos (a shield) need more height to read
-                if (w[i] > maxLogoW) { w[i] = maxLogoW; h[i] = Math.max(30, w[i] / ratio); w[i] = h[i] * ratio; }
-                int no = logos.get(i).no;
-                bw[i] = no > 0 ? num.measureText(String.valueOf(no)) + 26 : 0;
-                total += w[i] + (no > 0 ? 16 + bw[i] : 0) + (i > 0 ? gap : 0);
-            }
-            float cap = tv ? 700 : 880, scale = total > cap ? cap / total : 1f;  // never wider than the card
-            if (tv) scale *= 1.26f;  // the TV tile: the same strip, larger
-            cv.save();
-            cv.scale(scale, scale, W / 2f, 470);
-            float x = W / 2f - total / 2;
-            if (!likely.isEmpty()) { cv.drawText(likely, x, 481, t); x += t.measureText(likely) + 22; }
-            Paint sep = new Paint(Paint.ANTI_ALIAS_FLAG);
-            sep.setColor(Color.argb(90, 255, 255, 255));
-            for (int i = 0; i < imgs.size(); i++) {
-                if (i > 0) { cv.drawCircle(x + gap / 2, 470, 4, sep); x += gap; }
-                Paint lp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-                if (!m.channelSure) lp.setAlpha(200);  // a guess is shown a little softer
-                cv.drawBitmap(smooth(imgs.get(i), w[i]), null, new RectF(x, 470 - h[i] / 2, x + w[i], 470 + h[i] / 2), lp);
-                x += w[i];
-                int no = logos.get(i).no;
-                if (no > 0) {
-                    Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
-                    bg.setColor(Color.argb(46, 255, 255, 255));
-                    x += 16;
-                    cv.drawRoundRect(new RectF(x, 440, x + bw[i], 500), 12, 12, bg);
-                    cv.drawText(String.valueOf(no), x + 13, 486, num);
-                    x += bw[i];
-                }
-            }
-            cv.restore();
-            return;
-        }
-        Bitmap art = appArt(c, m.channelApp);
-        String label = (m.channelSure ? "" : caps(I18n.t("likely")) + ": ") + caps(chan(m.channel));
-        t.setTypeface(face("sans-serif-medium", Typeface.NORMAL));
-        t.setTextSize(tv ? 44 : 34);
-        t.setColor(m.channelSure ? Color.rgb(230, 232, 236) : Color.rgb(160, 166, 178));
-        float h = 56, w = art == null ? 0 : Math.min(140, h * art.getWidth() / art.getHeight());
-        h = art == null ? 0 : w * art.getHeight() / art.getWidth();
-        while (w + 20 + t.measureText(label) > 820 && t.getTextSize() > 22) t.setTextSize(t.getTextSize() - 2);
-        float total = w + (w > 0 ? 20 : 0) + t.measureText(label), x0 = 480 - total / 2;
-        if (art != null) {
-            Bitmap r = Bitmap.createBitmap((int) Math.max(1, w), (int) Math.max(1, h), Bitmap.Config.ARGB_8888);
-            Canvas rc = new Canvas(r);
-            Paint rp = new Paint(Paint.ANTI_ALIAS_FLAG);
-            rc.drawRoundRect(new RectF(0, 0, w, h), 10, 10, rp);
-            rp.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_IN));
-            rp.setFilterBitmap(true);
-            rc.drawBitmap(smooth(art, w), null, new RectF(0, 0, w, h), rp);
-            cv.drawBitmap(r, x0, 470 - h / 2, null);
-        }
-        cv.drawText(label, x0 + w + (w > 0 ? 20 : 0), 482, t);
-    }
-
-    /**
-     * Channel names as text pills ("USUALLY ON  [SKY SPORTS]  [TNT SPORTS]"), for countries where Fanela has no logos.
-     * A season-table guess is drawn a little softer, like the Greek "likely" logos.
-     */
-    static void drawPills(Canvas cv, Match m) {
-        List<String> names = names(m);
-        if (names.isEmpty()) return;
-        String lead = m.channelSure ? "" : caps(I18n.t("usually"));
-        Paint t = new Paint(Paint.ANTI_ALIAS_FLAG);
-        t.setTypeface(face("sans-serif-medium", Typeface.NORMAL));
-        t.setTextSize(36);
-        t.setColor(Color.rgb(160, 166, 178));
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setTypeface(face("sans-serif", Typeface.BOLD));
-        p.setTextSize(34);
-        p.setColor(m.channelSure ? Color.WHITE : Color.rgb(222, 225, 231));
-        float pad = 24, h = 60, gap = 14, y = 470;
-        float[] w = new float[names.size()];
+        int n = Math.min(names.size(), logos.size());
+        if (n == 0) return;
+        String lead = m.channelSure ? "" : caps(I18n.t("likely"));
+        t.setTextSize(40);
+        t.setColor(LEAD);
+        Paint pt = new Paint(Paint.ANTI_ALIAS_FLAG);  // a channel name in a pill
+        pt.setTypeface(face("sans-serif", Typeface.BOLD));
+        pt.setTextSize(40);
+        pt.setColor(LEAD);
+        Paint num = new Paint(Paint.ANTI_ALIAS_FLAG);  // the channel number in its box
+        num.setTypeface(face("sans-serif", Typeface.BOLD));
+        num.setTextSize(44);
+        num.setColor(Color.WHITE);
+        Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
+        bg.setColor(DIM);
+        Paint lp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        if (!m.channelSure) lp.setAlpha(217);  // a guess is shown a little softer
+        float logoH = n > 1 ? 50 : 58, maxLogoW = n > 1 ? 230 : 320, pillH = 64, pad = 24, gap = 34, y = 470;
+        Bitmap[] img = new Bitmap[n];
+        float[] w = new float[n], h = new float[n], bw = new float[n];
         float total = lead.isEmpty() ? 0 : t.measureText(lead) + 22;
-        for (int i = 0; i < names.size(); i++) {
-            w[i] = p.measureText(caps(names.get(i))) + 2 * pad;
-            total += w[i] + (i > 0 ? gap : 0);
+        for (int i = 0; i < n; i++) {
+            Bitmap src = Net.image(c, logos.get(i).url);
+            if (src != null) {
+                img[i] = trim(src);
+                if (img[i] != src) src.recycle();
+                float ratio = (float) img[i].getWidth() / img[i].getHeight();
+                h[i] = ratio < 2.2f ? logoH * (n > 1 ? 1.2f : 1.3f) : logoH; w[i] = h[i] * ratio;  // squarer logos (a shield) need more height to read
+                if (w[i] > maxLogoW) { w[i] = maxLogoW; h[i] = Math.max(30, w[i] / ratio); w[i] = h[i] * ratio; }
+            } else { w[i] = pt.measureText(caps(names.get(i))) + 2 * pad; h[i] = pillH; }
+            int no = logos.get(i).no;
+            bw[i] = no > 0 ? num.measureText(String.valueOf(no)) + 26 : 0;
+            total += w[i] + (no > 0 ? 16 + bw[i] : 0) + (i > 0 ? gap : 0);
         }
-        float scale = total > 880 ? 880 / total : 1f;  // never wider than the card
+        float cap = 880 / k, scale = (total > cap ? cap / total : 1f) * k;  // never wider than the card; the TV tile larger
         cv.save();
         cv.scale(scale, scale, W / 2f, y);
         float x = W / 2f - total / 2;
-        Rect r = new Rect();
-        p.getTextBounds("A", 0, 1, r);
-        if (!lead.isEmpty()) { cv.drawText(lead, x, y + r.height() / 2f, t); x += t.measureText(lead) + 22; }
-        Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
-        bg.setColor(Color.argb(m.channelSure ? 56 : 40, 255, 255, 255));
-        for (int i = 0; i < names.size(); i++) {
-            if (i > 0) x += gap;
-            cv.drawRoundRect(new RectF(x, y - h / 2, x + w[i], y + h / 2), h / 2, h / 2, bg);
-            cv.drawText(caps(names.get(i)), x + pad, y + r.height() / 2f, p);
+        if (!lead.isEmpty()) { cv.drawText(lead, x, y + capHeight(t) / 2, t); x += t.measureText(lead) + 22; }
+        Paint sep = new Paint(Paint.ANTI_ALIAS_FLAG);
+        sep.setColor(Color.argb(90, 255, 255, 255));
+        for (int i = 0; i < n; i++) {
+            if (i > 0) { cv.drawCircle(x + gap / 2, y, 4, sep); x += gap; }
+            if (img[i] != null) {
+                drawBitmap(cv, img[i], new RectF(x, y - h[i] / 2, x + w[i], y + h[i] / 2), lp);
+                img[i].recycle();
+            } else {
+                cv.drawRoundRect(new RectF(x, y - h[i] / 2, x + w[i], y + h[i] / 2), h[i] / 2, h[i] / 2, bg);
+                cv.drawText(caps(names.get(i)), x + pad, y + capHeight(pt) / 2, pt);
+            }
             x += w[i];
+            int no = logos.get(i).no;
+            if (no > 0) {
+                x += 16;
+                cv.drawRoundRect(new RectF(x, y - 30, x + bw[i], y + 30), 12, 12, bg);
+                cv.drawText(String.valueOf(no), x + 13, y + capHeight(num) / 2, num);
+                x += bw[i];
+            }
         }
         cv.restore();
     }
@@ -603,6 +650,9 @@ final class Cards {
         HomeRows.removeUnfollowed(c);
     }
 
+    /** A short stand-in for a signature (hundreds of characters of URLs): what the "cards" preferences store. */
+    static String digest(String sig) { return Integer.toHexString(sig.hashCode()) + ":" + sig.length(); }
+
     /** A card ready to show: the match, its image file and content URI. */
     static final class Ref {
         Match m; String name, uri; boolean last, stale;
@@ -612,8 +662,8 @@ final class Cards {
     static synchronized Ref ensure(Context c, Teams.Club k, Match m, String name, boolean last, long now) {  // one writer per card file
         SharedPreferences sp = c.getSharedPreferences("cards", Context.MODE_PRIVATE);
         boolean stale = Store.stale(c, k.id, m.team);
-        String sig = CARD_VERSION + I18n.lang() + m.signature() + stale + I18n.day(m.start) + I18n.time(m.start)
-            + images(c, m);  // redraw when images arrive
+        String sig = digest(CARD_VERSION + I18n.lang() + m.signature() + stale + I18n.day(m.start) + I18n.time(m.start)
+            + images(c, m));  // redraw when images arrive
         String uri = sp.getString("uri_" + name, null);
         File f = new File(c.getFilesDir(), name + ".png");
         if (uri == null || !sig.equals(sp.getString("sig_" + name, null)) || !f.exists()) {
@@ -657,18 +707,21 @@ final class Cards {
      * by date, then the latest results, newest first. Draws only what changed. Card files start with "c" so the home
      * screen may read them too (ArtProvider).
      */
-    static List<Ref> forApp(Context c, Teams.Club k, List<Match> all) {
+    static List<Ref> forApp(Context c, Teams.Club k, List<Match> all) { return forApp(c, k, all, true); }
+
+    /** render false: the same slots from the card files already on the TV, nothing drawn (a card not drawn yet has URI ""). */
+    static List<Ref> forApp(Context c, Teams.Club k, List<Match> all, boolean render) {
         long now = System.currentTimeMillis();
         String[] teams = k.teams(Teams.basketball(c));
         List<Ref> coming = new ArrayList<>(), done = new ArrayList<>();
         for (String team : teams) {
             String t = "c" + k.id + "_" + team.toLowerCase(Locale.US);
             Match next = pickNow(all, k.id, team, now);
-            if (next != null) add(coming, ensure(c, k, next, t + "_now", false, now));
+            if (next != null) add(coming, slot(c, k, next, t + "_now", false, now, render));
             int n = 0;
-            for (Match m : upcoming(all, k.id, team, next, now, 3)) add(coming, ensure(c, k, m, t + "_up" + (n++), false, now));
+            for (Match m : upcoming(all, k.id, team, next, now, 3)) add(coming, slot(c, k, m, t + "_up" + (n++), false, now, render));
             n = 0;
-            for (Match m : results(all, k.id, team, 2)) add(done, ensure(c, k, m, t + (n++ == 0 ? "_last" : "_res" + n), true, now));
+            for (Match m : results(all, k.id, team, 2)) add(done, slot(c, k, m, t + (n++ == 0 ? "_last" : "_res" + n), true, now, render));
         }
         java.util.Collections.sort(coming, COMING);
         java.util.Collections.sort(done, new java.util.Comparator<Ref>() {
@@ -676,6 +729,16 @@ final class Cards {
         });
         coming.addAll(done);
         return coming;
+    }
+
+    /** The card drawn (ensure), or, without rendering, whatever is on disk for its name; the latter skips ensure's lock on purpose. */
+    private static Ref slot(Context c, Teams.Club k, Match m, String name, boolean last, long now, boolean render) {
+        if (render) return ensure(c, k, m, name, last, now);
+        Ref r = new Ref();
+        r.m = m; r.name = name; r.last = last; r.stale = Store.stale(c, k.id, m.team);
+        String uri = c.getSharedPreferences("cards", Context.MODE_PRIVATE).getString("uri_" + name, null);
+        r.uri = uri != null && new File(c.getFilesDir(), name + ".png").exists() ? uri : "";
+        return r;
     }
 
     /** Coming matches: whatever is live first, then by kick-off. */
@@ -694,11 +757,11 @@ final class Cards {
         Match m = r.m;
         boolean live = live(m) || "SUSPENDED".equals(m.detail);
         if (r.last) return I18n.comp(m.comp) + " · " + when(m);
-        String state = live || "off".equals(m.state) ? I18n.detail(m.detail)
-            : when(m) + ("DELAYED".equals(m.detail) ? " · " + I18n.detail(m.detail) : "");
-        return I18n.comp(m.comp) + " · " + state + " · " + where(m)
-            + (r.stale ? " · " + I18n.t("not_updated") + " (" + I18n.t("last_update") + " " + I18n.day(Store.lastUpdate(c, k.id, m.team))
-            + " " + I18n.time(Store.lastUpdate(c, k.id, m.team)) + ")" : "");
+        String stale = r.stale ? " · " + I18n.t("not_updated") + " (" + I18n.t("last_update") + " " + I18n.day(Store.lastUpdate(c, k.id, m.team))
+            + " " + I18n.time(Store.lastUpdate(c, k.id, m.team)) + ")" : "";
+        if ("off".equals(m.state)) return I18n.comp(m.comp) + " · " + I18n.detail(m.detail) + " · " + I18n.day(m.start) + stale;  // no channel for a match that is off
+        String state = live ? I18n.detail(m.detail) : when(m) + ("DELAYED".equals(m.detail) ? " · " + I18n.detail(m.detail) : "");
+        return I18n.comp(m.comp) + " · " + state + " · " + where(m) + stale;
     }
 
     static String headline(Ref r) {
@@ -710,7 +773,7 @@ final class Cards {
 
     static void publish(Context c, Teams.Club k, List<Match> all) throws Exception {
         long now = System.currentTimeMillis();
-        long id = HomeRows.channel(c, k.rowKey(), k.label(), channelLogoLazy(c));
+        long id = HomeRows.channel(c, k.rowKey(), k.heading(), channelLogoLazy(c));
         SharedPreferences sp = c.getSharedPreferences("cards", Context.MODE_PRIVATE);
         List<HomeRows.Tile> tiles = new ArrayList<>();
         StringBuilder rowSig = new StringBuilder();
@@ -742,7 +805,7 @@ final class Cards {
                 rowSig.append(t.id).append(t.poster).append(t.title).append(t.desc).append(t.live).append(t.app);
             }
         }
-        String rs = id + ":" + rowSig;
+        String rs = digest(id + ":" + rowSig);
         if (rs.equals(sp.getString("row_sig_" + k.id, null))) return;
         HomeRows.setTiles(c, id, tiles);
         sp.edit().putString("row_sig_" + k.id, rs).apply();
@@ -788,25 +851,37 @@ final class Cards {
             try {
                 Match next = pickNow(all, club, team, now), last = pickLast(all, club, team);
                 if (next != null) {
-                    render(c, next, false, prefix + t + "_pre");
+                    both(c, next, false, prefix + t + "_pre");
                     Match lv = next.copy();
                     lv.state = "in"; lv.hs = "FC".equals(team) ? "2" : "101"; lv.as = "FC".equals(team) ? "1" : "99";
                     lv.detail = "FC".equals(team) ? "90'+3'" : "OT 00:41";
-                    render(c, lv, false, prefix + t + "_live");
+                    both(c, lv, false, prefix + t + "_live");
+                    Match ht = next.copy(); ht.state = "in"; ht.hs = "1"; ht.as = "0"; ht.detail = "HT";
+                    both(c, ht, false, prefix + t + "_ht");
                     Match pp = next.copy(); pp.state = "off"; pp.detail = "POSTPONED";
-                    render(c, pp, false, prefix + t + "_off");
-                    render(c, next.copy(), true, prefix + t + "_stale");
+                    both(c, pp, false, prefix + t + "_off");
+                    both(c, next.copy(), true, prefix + t + "_stale");
                     Match nl = next.copy(); nl.state = "in"; nl.hs = null; nl.as = null; nl.detail = "IN_PROGRESS";
-                    render(c, nl, false, prefix + t + "_noscore");
+                    both(c, nl, false, prefix + t + "_noscore");
                     Match uk = next.copy(); uk.channelKnown = false; uk.channelSure = false; uk.tbd = true;
-                    render(c, uk, false, prefix + t + "_tba");
+                    both(c, uk, false, prefix + t + "_tba");
+                    Match ln = next.copy(); ln.home = "Nottingham Forest"; ln.away = "Crvena Zvezda"; ln.homeCrest = null; ln.awayCrest = null;
+                    both(c, ln, false, prefix + t + "_long");
                 }
                 if (last != null) {
-                    render(c, last, false, prefix + t + "_post");
-                    Match pen = last.copy(); pen.hs = "1"; pen.as = "1"; pen.pens = "4–3"; pen.clubWon = pen.clubHome() ? 1 : -1;
-                    render(c, pen, false, prefix + t + "_pens");
+                    both(c, last, false, prefix + t + "_post");
+                    Match pen = last.copy(); pen.hs = "1"; pen.as = "1"; pen.pens = "4–3"; pen.detail = "FT_PEN"; pen.clubWon = pen.clubHome() ? 1 : -1;
+                    both(c, pen, false, prefix + t + "_pens");
+                    Match aet = last.copy(); aet.hs = "2"; aet.as = "2"; aet.detail = "FT_AET"; aet.clubWon = 0;
+                    both(c, aet, false, prefix + t + "_aet");
                 }
             } catch (Throwable ignored) { }
         }
+    }
+
+    /** A demo card in both variants: the app's (name.png) and the TV home screen's (name_tv.png). */
+    private static void both(Context c, Match m, boolean stale, String name) throws Exception {
+        render(c, m, stale, name);
+        render(c, m, stale, name + "_tv");
     }
 }

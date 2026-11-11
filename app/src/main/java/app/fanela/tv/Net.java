@@ -19,6 +19,8 @@ import java.util.Map;
  */
 final class Net {
     private static final Map<String, long[]> backoff = new HashMap<>();  // host -> {until, failures}
+    /** Live polls: a short pause after a 429 or a server error (1 min doubling to 5), so a struggling feed gets air. */
+    private static final Map<String, long[]> liveBackoff = new HashMap<>();
 
     /** Skipped because the host is in backoff (not a network error, not the image's fault). */
     static final class Backoff extends IOException { Backoff(String h) { super("backoff " + h); } }
@@ -26,7 +28,7 @@ final class Net {
     static final class TooSlow extends IOException { TooSlow() { super("too slow"); } }
 
     /** Forget every backoff: the user is looking at the app, or asked for a refresh. */
-    static synchronized void reset() { backoff.clear(); }
+    static synchronized void reset() { backoff.clear(); liveBackoff.clear(); }
 
     private static volatile Context app;  // for the connectivity check; set by the first image fetch or refresh
     static void init(Context c) { if (app == null) app = c.getApplicationContext(); }
@@ -58,6 +60,21 @@ final class Net {
         backoff.put(host, new long[]{System.currentTimeMillis() + wait, n});
     }
 
+    static synchronized boolean liveBlocked(String host) {
+        long[] b = liveBackoff.get(host);
+        return b != null && System.currentTimeMillis() < b[0];
+    }
+
+    static synchronized void liveResult(String host, boolean ok) {
+        if (ok) { liveBackoff.remove(host); return; }
+        long[] b = liveBackoff.get(host);
+        long n = b == null ? 1 : b[1] + 1;
+        liveBackoff.put(host, new long[]{System.currentTimeMillis() + liveWait(n), n});
+    }
+
+    /** The pause after the n-th failure in a row of a live feed: 1, 2, 4, then 5 minutes. */
+    static long liveWait(long n) { return Math.min(5 * 60000L, 60000L * (1L << Math.min(3, n - 1))); }
+
     static String http(String url) throws IOException {
         return new String(bytes(url, 3 << 20, false), "UTF-8");
     }
@@ -67,7 +84,10 @@ final class Net {
         return new String(bytes(url, 3 << 20, false, header, value), "UTF-8");
     }
 
-    /** Live score polls: never skipped by backoff and never cause it (a goal must not wait for a timer). */
+    /**
+     * Live score polls: untouched by the long per-host backoff of the other requests (a goal must not wait for a
+     * timer), but paused for a minute or so after a 429 or a server error (liveResult).
+     */
     static String httpLive(String url) throws IOException {
         return new String(bytes(url, 3 << 20, true), "UTF-8");
     }
@@ -80,6 +100,7 @@ final class Net {
         URL u = new URL(url);
         String host = live ? "" : u.getHost();
         if (!live && blocked(host)) throw new Backoff(host);
+        if (live && liveBlocked(u.getHost())) throw new Backoff(u.getHost());
         long deadline = System.currentTimeMillis() + 20000;
         HttpURLConnection c = (HttpURLConnection) u.openConnection();
         try {
@@ -91,7 +112,11 @@ final class Net {
             if (header != null && value != null) c.setRequestProperty(header, value);
             int code = c.getResponseCode();
             if (!"https".equals(c.getURL().getProtocol()) && url.startsWith("https")) throw new IOException("downgrade");
-            if (code == 403 || code == 429 || code >= 500) { if (!live) result(host, false); throw new IOException("HTTP " + code); }
+            if (code == 403 || code == 429 || code >= 500) {
+                if (!live) result(host, false);
+                else if (code != 403) liveResult(u.getHost(), false);
+                throw new IOException("HTTP " + code);
+            }
             if (code >= 400) throw new IOException("HTTP " + code);  // e.g. 404 for a missing day: not the host's fault
             try (InputStream in = c.getInputStream()) {
                 ByteArrayOutputStream b = new ByteArrayOutputStream();
@@ -103,7 +128,9 @@ final class Net {
                     if (System.currentTimeMillis() > deadline) throw new TooSlow();
                 }
                 if (!live) result(host, true);
+                else liveResult(u.getHost(), true);
                 return b.toByteArray();
+
             }
         } catch (IOException e) {
             // only the host's fault counts (no answer while the TV is online); being offline never blocks a host

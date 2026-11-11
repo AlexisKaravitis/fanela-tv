@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/AlexisKaravitis/fanela-tv/releases/latest"><img alt="Latest release" src="https://img.shields.io/badge/release-v1.1.0-1565c0"></a>
+  <a href="https://github.com/AlexisKaravitis/fanela-tv/releases/latest"><img alt="Latest release" src="https://img.shields.io/badge/release-v1.1.2-1565c0"></a>
   <img alt="Android TV 8.0+" src="https://img.shields.io/badge/Android%20TV-8.0%2B-3ddc84">
   <img alt="Languages" src="https://img.shields.io/badge/languages-English%20%7C%20%CE%95%CE%BB%CE%BB%CE%B7%CE%BD%CE%B9%CE%BA%CE%AC-555">
   <img alt="No ads" src="https://img.shields.io/badge/ads-none-555">
@@ -34,7 +34,7 @@ It is made for the remote: one row per club, big cards, and nothing to sign up f
   Eredivisie, Süper Lig, MLS, Brasileirão, Argentine Primera, Saudi Pro League, the three UEFA cups, the NBA, the
   EuroLeague and the EuroCup. Pick a league, then its clubs; cup and European games come with the club.
 - **Where to watch, by country.** Set your country (it starts from the TV's own). Outside Greece each card shows who
-  holds that competition's rights there this season, for example "Usually on Sky Sports / TNT Sports" in the UK.
+  holds that competition's rights there this season, for example "Likely on Sky Sports or TNT Sports" in the UK.
   When no official list exists it says so plainly: "Check your provider's guide".
 - **Matches in order.** Whatever is live comes first, then the coming matches of both sports by date, then the latest
   results. The line under the header describes the match you're on.
@@ -67,9 +67,9 @@ It is made for the remote: one row per club, big cards, and nothing to sign up f
 
 Fanela is not on Google Play. You install the APK yourself, which takes about five minutes the first time.
 
-1. Download `fanela-1.1.0.apk` from the [Releases page](https://github.com/AlexisKaravitis/fanela-tv/releases/latest).
+1. Download `fanela-1.1.2.apk` from the [Releases page](https://github.com/AlexisKaravitis/fanela-tv/releases/latest).
 2. Copy it to the TV with **Send Files to TV** or a USB stick, or install it from a computer with
-   `adb install fanela-1.1.0.apk`.
+   `adb install fanela-1.1.2.apk`.
 3. Open Fanela, choose a language and your country, pick your clubs and press **Done**.
 
 The [install guide](docs/INSTALL.md) has every step, including how to allow installs from unknown sources on Sony,
@@ -118,7 +118,7 @@ its data is more than 6 hours old.
 
 | | |
 |---|---|
-| `main` | The current release, 1.1.0 (tag `v1.1.0`). |
+| `main` | The current release, 1.1.2 (tag `v1.1.2`). |
 | `v1.0.0` | The first release, kept as a tag. |
 
 Every release and its APK is on the [Releases page](https://github.com/AlexisKaravitis/fanela-tv/releases).
