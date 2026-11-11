@@ -19,8 +19,8 @@ android {
         applicationId 'app.fanela.tv'
         minSdk 26          // Android TV 8.0: first version with home-screen rows (preview channels)
         targetSdk 36
-        versionCode 10
-        versionName '1.2.0'
+        versionCode 11
+        versionName '1.2.1'
         resourceConfigurations += ['en', 'el']
         // Club crests and exact channels from the TV guides (both can be switched off for a stricter build).
         buildConfigField 'boolean', 'REMOTE_IMAGES', 'true'

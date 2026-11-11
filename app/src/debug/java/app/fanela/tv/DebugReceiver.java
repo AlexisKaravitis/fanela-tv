@@ -14,7 +14,9 @@ import java.util.concurrent.Executors;
  *     [--es country GB] draws it as a viewer in that country would see it (where-to-watch), without changing the setting.
  *   ... -a app.fanela.tv.MATRIX --es style signature|clean|kit|ticket|clash|legacy|all --es lang en [--ez scores false]
  *     draws the 1.2 card state matrix (Fixtures: every state and edge state) in that style into
- *     files/matrix/<lang>/<style>/, then DONE. Its crests and logos are fetched first (Fixtures.prefetch).
+ *     files/matrix/<lang>/<style>/, then DONE. Its crests and logos are fetched first (Fixtures.prefetch). Beside
+ *     each card: its probe (.tsv), its .meta (competition names, state, line 4's date) and, in nocomp/, the same card
+ *     drawn without its competition (the audit checks nothing else moves).
  *   ... -a app.fanela.tv.SCENARIO --es name home|live|loading|offline|empty|many|off [--es lang el] [--es layout matchday|club]
  *     shows the home screen in a fixed state of the app spec (Scenario), its images fetched first; then DONE in
  *     files/scenario. Restart the app to see it (am force-stop, am start). "off" gives the real data back.

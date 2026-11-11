@@ -65,6 +65,97 @@ final class CardKit {
 
     static float cap(Paint p) { return Cards.capHeight(p); }
 
+    // ---------- the competition (LAYOUT-COMPETITION §3: one fit, every style) ----------
+
+    /** No competition is set under this, and none is ever cut with an ellipsis: it gives way instead. */
+    static final float COMP_MIN = 44;
+
+    /** A competition name's ink width at a size and tracking (a Paint on the device; a fake in tests). */
+    interface CompMeasure { float width(String s, float size, float track); }
+
+    /** How the competition is set: the name (C1 or C2), its size and tracking. */
+    static final class CompFit {
+        final String text;
+        final float size, track;
+        CompFit(String text, float size, float track) { this.text = text; this.size = size; this.track = track; }
+    }
+
+    /**
+     * The competition in avail, the room the state (and everything else) left it: for each name (C1, then C2), for each
+     * tracking, from start down to min 2 px a step; the first that fits wins. null: it is not drawn on this card. The
+     * state, the hero, the opponent and the channel are laid out first and never move or shrink for it. Pure.
+     */
+    static CompFit fitComp(CompMeasure m, List<String> names, float avail, float start, float min, float[] tracks) {
+        List<float[]> steps = new java.util.ArrayList<>();
+        for (float t : tracks) for (float s = start; s >= min; s -= 2) steps.add(new float[]{s, t});
+        return fitComp(m, names, avail, steps.toArray(new float[0][]));
+    }
+
+    /**
+     * As above with the size / tracking pairs given in order ({size, track}: the Ticket's 46/.12 → 46/.08 → 44/.06 →
+     * 44/.02, Clash's 48 → 44 at .05 then 44 at .02), each name in turn. A pair under COMP_MIN is never tried.
+     */
+    static CompFit fitComp(CompMeasure m, List<String> names, float avail, float[][] steps) {
+        if (names == null || avail <= 0) return null;
+        for (String n : names) {
+            if (n == null || n.isEmpty()) continue;
+            for (float[] st : steps) {
+                if (st[0] < COMP_MIN) continue;
+                if (m.width(n, st[0], st[1]) <= avail) return new CompFit(n, st[0], st[1]);
+            }
+        }
+        return null;
+    }
+
+    /** A paint's ink width for a string (its tracking after the last glyph left out, as the spec measures). */
+    static float inkWidth(Paint p, String s) {
+        android.graphics.Rect r = new android.graphics.Rect();
+        p.getTextBounds(s, 0, s.length(), r);
+        return r.width();
+    }
+
+    /** CompMeasure over a paint (its size and tracking set for each measure): the ink width. */
+    static CompMeasure measure(final Paint p) {
+        return (s, size, track) -> { p.setTextSize(size); p.setLetterSpacing(track); return inkWidth(p, s); };
+    }
+
+    /** The names in display capitals (Cards.caps), longest first. */
+    static List<String> caps(List<String> names) {
+        List<String> out = new java.util.ArrayList<>();
+        for (String n : names) out.add(Cards.caps(n));
+        return out;
+    }
+
+    /**
+     * The header's competition (Signature, Kit): RC Regular caps, tracking .05, white 72 % (line 4's voice), 48 → 44,
+     * its ink's left edge at x; on baseline, or with its capitals centred on cy when baseline is NaN (LIVE: the pill's
+     * centre). avail: what the state left it. Returns the fit drawn, or null when nothing was.
+     */
+    static CompFit headerComp(Canvas cv, CardModel m, float x, float baseline, float cy, float avail) {
+        Paint p = text(Ui.COND, 48, alpha(WHITE, 0.72f));
+        p.setFontFeatureSettings(null);
+        CompFit f = fitComp(measure(p), caps(m.compNames), avail, 48, COMP_MIN, new float[]{0.05f});
+        if (f == null) return null;
+        p.setTextSize(f.size);
+        p.setLetterSpacing(f.track);
+        drawLeftInk(cv, p, f.text, x, Float.isNaN(baseline) ? cy + cap(p) / 2 : baseline);
+        return f;
+    }
+
+    /** Draws text with its ink's left edge at x. */
+    static void drawLeftInk(Canvas cv, Paint p, String s, float x, float baseline) {
+        android.graphics.Rect r = new android.graphics.Rect();
+        p.getTextBounds(s, 0, s.length(), r);
+        cv.drawText(s, x - r.left, baseline, p);
+    }
+
+    /** Draws text with its ink's right edge at x. */
+    static void drawRightInk(Canvas cv, Paint p, String s, float x, float baseline) {
+        android.graphics.Rect r = new android.graphics.Rect();
+        p.getTextBounds(s, 0, s.length(), r);
+        cv.drawText(s, x - r.right, baseline, p);
+    }
+
     // ---------- the VS mark (owner, fx6: "VS instead of V is nicer", in every style and in the app) ----------
     /**
      * Between my club and the opponent: VS, or @ when my club plays away (Signature and Kit name only the opponent, so
@@ -74,7 +165,7 @@ final class CardKit {
     static final String VS = "VS", AT = "@";
     /**
      * The mark on a card: Google Sans Bold capitals at 44 (the legibility floor: 18 px at the launcher's 0.404),
-     * tracked .06 em, at 66 % white (the state line's secondary segment): a label, quieter than the names beside it.
+     * tracked .06 em, at 66 % white: a label, quieter than the names beside it.
      */
     static final float VS_SIZE = 44, VS_TRACK = 0.06f, VS_A = 0.66f;
 

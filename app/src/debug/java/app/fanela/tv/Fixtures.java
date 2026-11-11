@@ -32,14 +32,21 @@ final class Fixtures {
         ARIS = "https://a.espncdn.com/i/teamlogos/soccer/500/11553.png",
         PAO = "https://a.espncdn.com/i/teamlogos/soccer/500/443.png",
         OFI = "https://a.espncdn.com/i/teamlogos/soccer/500/1010.png",
-        SPURS = "https://a.espncdn.com/i/teamlogos/soccer/500/367.png";
+        SPURS = "https://a.espncdn.com/i/teamlogos/soccer/500/367.png",
+        ARSENAL = "https://a.espncdn.com/i/teamlogos/soccer/500/359.png";
 
     static final class Fx {
         final String name, club; final Match m;
-        /** Drawn as not updated for a while (the warning in place of the competition). */
+        /** Drawn as not updated for a while (the amber warning). */
         boolean stale;
+        /** Drawn as a viewer in this country sees it (null: the device's setting). */
+        String country;
+        /** The kit pattern forced on the club (design checks: a hooped kit no followed club wears yet); null: its own. */
+        ClubTokens.Pattern pattern;
         Fx(String name, String club, Match m) { this.name = name; this.club = club; this.m = m; }
         Fx stale() { stale = true; return this; }
+        Fx in(String cc) { country = cc; return this; }
+        Fx wearing(ClubTokens.Pattern p) { pattern = p; return this; }
     }
 
     static long at(int dayOffset, int hh, int mm) {
@@ -169,6 +176,33 @@ final class Fixtures {
         x.start = at(5, 17, 0); out.add(new Fx("clash_black", "605", x));
         x = m("86", "FC", "uefa.champions", "Tottenham", "Real Madrid", false, SPURS, REAL);
         x.start = at(-2, 22, 0); x.state = "post"; x.hs = "1"; x.as = "3"; x.clubWon = 1; out.add(new Fx("clash_white", "86", x));
+
+        // the competition on every card (LAYOUT-COMPETITION §11): the long names beside a long state, the cups, a
+        // league with a date, Greek leagues abroad (no "Greek" on the card), a stage dropped, the short initialisms, a
+        // league Fanela has no label for (ESPN's own name), and none at all (nothing drawn, nothing else moves)
+        x = channel(m("605", "FC", "uefa.europa.conf", "PAOK", "AC Milan", true, PAOK_FC, MILAN), "Magenta Sport", 0, false, Cards.MAGENTA);
+        x.start = at(1, 19, 45); out.add(new Fx("conf_tomorrow", "605", x));
+        x = channel(m("887", "FC", "uefa.europa.conf", "AEK Athens", "AC Milan", true, AEK, MILAN), "Magenta Sport", 0, false, Cards.MAGENTA);
+        x.start = now + 15 * 60000L; x.detail = "DELAYED"; out.add(new Fx("conf_delayed", "887", x));
+        x = channel(m("605", "BC", "gbl", "PAOK", "Panathinaikos", true, PAOK_BC, PAO_BC), "ΕΡΤ1", 0, true, Cards.MAGENTA);
+        x.start = at(5, 18, 0); out.add(new Fx("gbl_date", "605", x));
+        x = channel(m("435", "FC", "gre.1", "Olympiacos", "Panathinaikos", true, OLY_FC, PAO), "Premier Sports", 0, false, null);
+        x.listedBy = "table"; x.start = at(4, 20, 0); out.add(new Fx("gre1_abroad", "435", x).in("GB"));
+        x = channel(m("605", "FC", "uefa.champions_qual", "PAOK", "Eintracht Frankfurt", true, PAOK_FC, FRANKFURT), "Magenta Sport · MEGA", 0, false, Cards.MAGENTA);
+        x.start = at(7, 21, 0); out.add(new Fx("champions_qual", "605", x));
+        x = channel(m("435", "BC", "euroleague.ff", "Olympiacos", "Panathinaikos", true, OLY_BC, PAO_BC), "Novasports Prime", 318, true, Cards.MAGENTA);
+        x.start = at(20, 19, 0); out.add(new Fx("euroleague_ff", "435", x));
+        x = channel(m("887", "BC", "bcl", "AEK", "Balkan", true, AEK, BALKAN), "ΕΡΤ2", 0, false, Cards.MAGENTA);
+        x.start = at(-1, 20, 0); x.state = "post"; x.hs = "88"; x.as = "80"; x.clubWon = 1; out.add(new Fx("bcl", "887", x));
+        x = channel(m("367", "FC", "eng.1", "Tottenham", "Arsenal", true, SPURS, ARSENAL), "Sky Sports Main Event", 401, true, null);
+        x.listedBy = "tv"; x.start = at(2, 17, 30); out.add(new Fx("premier_league", "367", x).in("GB"));
+        x = channel(m("86", "FC", "Scottish Premiership", "Real Madrid", "AC Milan", true, REAL, MILAN), "Sky Sports · NOW", 0, true, null);
+        x.listedBy = "ronin"; x.start = at(15, 20, 0); out.add(new Fx("unknown_comp", "86", x));
+        x = channel(m("435", "FC", "", "Olympiacos", "Iraklis", true, OLY_FC, IRAKLIS), "Magenta Sport", 0, false, Cards.MAGENTA);
+        x.start = at(1, 20, 0); out.add(new Fx("no_comp", "435", x));
+        // the art director's first looks: a hooped kit under Kit's fade (no followed club wears one yet)
+        x = channel(m("435", "FC", "gre.1", "Olympiacos", "Kifisia", true, OLY_FC, KIFISIA), "Magenta Sport", 0, false, Cards.MAGENTA);
+        x.start = at(1, 19, 0); out.add(new Fx("hoops", "435", x).wearing(ClubTokens.Pattern.HOOPS));
         return out;
     }
 
@@ -207,29 +241,67 @@ final class Fixtures {
         File[] old = dir.listFiles();
         for (int i = 0; old != null && i < old.length; i++) old[i].delete();
         long now = System.currentTimeMillis();
+        File bare = new File(dir, "nocomp");
+        bare.mkdirs();
+        old = bare.listFiles();
+        for (int i = 0; old != null && i < old.length; i++) old[i].delete();
         for (Fx f : all(now)) {
             Teams.Club k = club(c, f);
             long t0 = System.nanoTime();
-            StringBuilder log = new StringBuilder();
-            Bitmap b = probed(c, k, f.m, f.stale, style, scores, now, log);
+            StringBuilder log = new StringBuilder(), meta = new StringBuilder();
+            Bitmap b = probed(c, k, f, style, scores, now, log, false, meta);
             long ms = (System.nanoTime() - t0) / 1000000;
-            try (java.io.FileOutputStream o = new java.io.FileOutputStream(new File(dir, f.name + ".png"))) { b.compress(Bitmap.CompressFormat.PNG, 100, o); }
-            try (java.io.FileOutputStream o = new java.io.FileOutputStream(new File(dir, f.name + ".tsv"))) { o.write(log.toString().getBytes("UTF-8")); }
-            b.recycle();
+            write(b, log, dir, f.name);
+            try (java.io.FileOutputStream o = new java.io.FileOutputStream(new File(dir, f.name + ".meta"))) { o.write(meta.toString().getBytes("UTF-8")); }
+            // the same card without its competition: the audit checks that nothing else moves (LAYOUT-COMPETITION §11)
+            log = new StringBuilder();
+            write(probed(c, k, f, style, scores, now, log, true, new StringBuilder()), log, bare, f.name);
             android.util.Log.i("Fanela", "matrix " + lang + "/" + style + "/" + f.name + " " + ms + " ms");
         }
         new File(dir, "DONE").createNewFile();
+    }
+
+    private static void write(Bitmap b, CharSequence log, File dir, String name) throws java.io.IOException {
+        try (java.io.FileOutputStream o = new java.io.FileOutputStream(new File(dir, name + ".png"))) { b.compress(Bitmap.CompressFormat.PNG, 100, o); }
+        try (java.io.FileOutputStream o = new java.io.FileOutputStream(new File(dir, name + ".tsv"))) { o.write(log.toString().getBytes("UTF-8")); }
+        b.recycle();
+    }
+
+    /**
+     * A fixture drawn through the Probe in its viewer's country and with its kit pattern, if it has its own; noComp:
+     * with the model's competition emptied. meta: the competition's names (as written and in capitals), the state
+     * words and line 4's date, for the audit to find them among the drawn texts (the card's .meta).
+     */
+    static Bitmap probed(Context c, Teams.Club k, Fx f, String styleId, boolean showScores, long now, StringBuilder log,
+                         boolean noComp, StringBuilder meta) {
+        String was = Where.country();
+        if (f.country != null) Where.use(f.country);
+        try {
+            Ui.fonts(c);
+            CardModel model = CardModel.of(f.m, showScores, f.stale, now);
+            CardArt art = new CardArt(c, model, k);
+            ClubTokens tokens = CardStyles.tokens(k, model, art);
+            if (f.pattern != null) tokens.pattern = f.pattern;
+            meta(model, meta, noComp);
+            return probed(c, model, art, tokens, styleId, log);
+        } finally {
+            Where.use(was);
+        }
+    }
+
+    private static void meta(CardModel model, StringBuilder mt, boolean noComp) {
+        if (noComp) model.compNames.clear();  // fx8-only
+        mt.append("COMP\t").append(String.join("|", model.compNames)).append('\n');  // fx8-only
+        mt.append("CAPS\t").append(String.join("|", CardKit.caps(model.compNames))).append('\n');  // fx8-only
+        mt.append("STATE\t").append(model.stateLine).append('\n');  // fx8-only
+        mt.append("DATE4\t").append(SignatureStyle.footDate(model)).append('\n');  // fx8-only
     }
 
     /**
      * CardStyles.draw, the same card, drawn through a Probe that writes every element's box (card px) to log: one
      * line a draw call, "kind  left top right bottom  alpha  shader  text", for the layout audit (design/qa).
      */
-    static Bitmap probed(Context c, Teams.Club k, Match m, boolean stale, String styleId, boolean showScores, long now, StringBuilder log) {
-        Ui.fonts(c);
-        CardModel model = CardModel.of(m, showScores, stale, now);
-        CardArt art = new CardArt(c, model, k);
-        ClubTokens tokens = CardStyles.tokens(k, model, art);
+    static Bitmap probed(Context c, CardModel model, CardArt art, ClubTokens tokens, String styleId, StringBuilder log) {
         CardStyle st = CardStyles.get(styleId);
         if (!st.suits(tokens)) st = CardStyles.get(Appearance.KIT);
         log.append("STYLE\t").append(st.id()).append('\n');

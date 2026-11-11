@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1 (12 November 2026)
+
+- Every card shows the competition again, quietly at the top left (EuroLeague, Super League, Champions League...),
+  with the day or LIVE at the top right; on results the date sits at the bottom.
+- The Settings button at the bottom of the club list is a gear again (it looked like a brightness icon).
+- "Karditsa" in English titles too.
+
 ## 1.2.0 (11 November 2026)
 
 A redesign of the cards on the TV's home screen and of the app itself. Updating keeps every setting.

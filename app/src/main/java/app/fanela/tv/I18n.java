@@ -187,13 +187,13 @@ final class I18n {
             + "Κανάλια σε άλλες χώρες: οι λίστες τηλεοπτικών συνεργατών που δημοσιεύουν η UEFA, η Premier League, η LaLiga, η Lega Serie A, η Bundesliga, "
             + "η LFP, η Eredivisie, η TFF, το MLS, το NBA και η EuroLeague Basketball· για τη Liga Portugal, οι ανακοινώσεις των ίδιων των καναλιών. Όπου αυτές δεν αναφέρουν κάτι, το Fanela παίρνει τα στοιχεία από τη Wikipedia: %s "
             + "(συντάκτες της Wikipedia, άδεια CC BY-SA 4.0, creativecommons.org/licenses/by-sa/4.0). Ο πίνακας του Fanela που προκύπτει διατίθεται με την ίδια άδεια.\n\n"
-            + "Οι ώρες και τα κανάλια μπορεί να αλλάξουν. Γραμματοσειρές: Google Sans και Roboto Condensed (SIL Open Font License / Apache License 2.0· οι άδειές τους ολόκληρες στο τέλος της σελίδας).",
+            + "Οι ώρες και τα κανάλια μπορεί να αλλάξουν. Γραμματοσειρές: Google Sans και Roboto Condensed (SIL Open Font License / Apache License 2.0· οι άδειές τους ολόκληρες στο τέλος της σελίδας). Εικονίδιο ρυθμίσεων: Material Icons της Google (Apache License 2.0).",
             "Fixtures and scores: ESPN, EuroLeague, TheSportsDB.\n\n"
             + "Channels in Greece: the MagentaTV and Sport24 TV guides, SofaScore, and each club's TV rights for the season.\n\n"
             + "Channels in other countries: the TV partner lists published by UEFA, the Premier League, LaLiga, Lega Serie A, the Bundesliga, "
             + "the LFP, the Eredivisie, the TFF, MLS, the NBA and EuroLeague Basketball; for Liga Portugal, the broadcasters' own announcements. Where they say nothing, Fanela uses Wikipedia: %s "
             + "(by Wikipedia contributors, CC BY-SA 4.0, creativecommons.org/licenses/by-sa/4.0). Fanela's table made from them is shared under the same licence.\n\n"
-            + "Times and channels can change. Fonts: Google Sans and Roboto Condensed (SIL Open Font License / Apache License 2.0; their licences in full at the end of this page).");
+            + "Times and channels can change. Fonts: Google Sans and Roboto Condensed (SIL Open Font License / Apache License 2.0; their licences in full at the end of this page). Settings icon: Google's Material Icons (Apache License 2.0).");
         p("privacy_short", "Χωρίς λογαριασμό, διαφημίσεις ή παρακολούθηση. Οι επιλογές σου μένουν σε αυτή την τηλεόραση.",
             "No account, no ads, no tracking. Your choices stay on this TV.");
         p("privacy_full", PRIVACY_EL, PRIVACY_EN);

@@ -22,7 +22,7 @@ import java.util.Set;
 final class Cards {
     static final String MAGENTA = "gr.cosmote.cosmotetv.androidtv", EON = "com.ug.eon.android.tv",
         SPORTFM = "gr.sportfmtv.app", ANT1 = "gr.antenna.ant1.screen";
-    static final int CARD_VERSION = 20;  // bump when the drawing changes: every card is redrawn once
+    static final int CARD_VERSION = 22;  // bump when the drawing changes: every card is redrawn once
 
     // ---------- where to watch (best guess until a TV guide confirms it) ----------
     /** Greek TV rights. Football / Basket League: 2026-27. EuroLeague + EuroCup: Nova until the end of 2027-28. */

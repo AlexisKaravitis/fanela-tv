@@ -61,13 +61,21 @@ final class TicketStyle implements CardStyle {
         cv.drawRect(0, 0, BODY_W, Cards.H, fill);
         int ink = t.stockInk;
 
-        // competition (or the not-updated warning): GS Bold 46 caps, tracking .12 em, 80 % ink, fit 500 min 36
-        // (spec: 36 / .14 em / 28, which read as 15 px at the launcher's unfocused 0.404)
+        // the eyebrow: the competition (LAYOUT-COMPETITION §8: its card name through the shared fit, 46 /.12 → 46 /.08 →
+        // 44 /.06 → 44 /.02, then its short name; never under 44, never cut) or, stale, the not-updated warning (GS Bold
+        // 46 caps, tracking .12 em, fit 500 min 36); 80 % ink
         Paint comp = words(CardKit.text(Ui.BOLD, EYEBROW, CardKit.alpha(ink, 0.80f)));
         comp.setLetterSpacing(0.12f);
-        String label = m.stale ? Cards.caps(I18n.t("not_updated").replace("⚠", "").trim()) : m.competition;
         float x = 58, maxW = 500;
-        if (m.stale) {
+        if (!m.stale) {
+            CardKit.CompFit f = CardKit.fitComp(CardKit.measure(comp), CardKit.caps(m.compNames), maxW, EYEBROW_STEPS);
+            if (f != null) {
+                comp.setTextSize(f.size);
+                comp.setLetterSpacing(f.track);
+                left(cv, comp, f.text, x, baselineNormal(EYEBROW_TOP, f.size, GS_ASC));
+            }
+        } else {
+            String label = Cards.caps(I18n.t("not_updated").replace("⚠", "").trim());
             // amber where it reads (dark and red stocks); on a yellow or orange stock the words take the stock's ink
             // and the amber sign sits on a small dark chip
             boolean amber = amberReads(t.stock);
@@ -81,9 +89,9 @@ final class TicketStyle implements CardStyle {
             }
             Cards.warning(cv, x, base, cap, comp);
             x += cap * 1.12f + 14 + pad; maxW -= cap * 1.12f + 14 + pad;
+            float cs = CardKit.fit(comp, label, maxW, EYEBROW, EYEBROW_MIN);
+            left(cv, comp, CardKit.cut(comp, label, maxW), x, baselineNormal(EYEBROW_TOP, cs, GS_ASC));
         }
-        float cs = CardKit.fit(comp, label, maxW, EYEBROW, EYEBROW_MIN);
-        left(cv, comp, CardKit.cut(comp, label, maxW), x, baselineNormal(EYEBROW_TOP, cs, GS_ASC));
 
         // crests: bare at 176, or on an ivory disc (crest 150) when the crest's colour matches the stock (spec §1.7)
         ClubTokens.CrestInfo oppInfo = CardStyles.crest(m.oppCrest, art.oppCrest());
@@ -118,8 +126,12 @@ final class TicketStyle implements CardStyle {
      */
     static final float HERO_TOP_ALONE = 188;
 
-    /** The competition over the body (the eyebrow): its size, its smallest and its box top (spec: 36, 28, 40). */
+    /**
+     * The eyebrow over the body: its size, the not-updated warning's smallest, its box top (spec: 36, 28, 40); the
+     * competition's size / tracking steps (LAYOUT-COMPETITION §8), tried for its card name, then its short name.
+     */
     static final float EYEBROW = 46, EYEBROW_MIN = 36, EYEBROW_TOP = 36;
+    static final float[][] EYEBROW_STEPS = {{46, 0.12f}, {46, 0.08f}, {44, 0.06f}, {44, 0.02f}};
 
     /** The chip under the warning sign where amber doesn't read on the stock. */
     static final int WARN_CHIP = 0xFF141416;

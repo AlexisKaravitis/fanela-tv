@@ -510,19 +510,70 @@ final class AppKit {
         cv.restore();
     }
 
-    /** The Settings gear of the rail (a 48-unit line icon) in a box of size centred on (cx, cy). */
+    /**
+     * The Settings gear of the rail: Android TV's own settings icon (Material Icons "settings", Apache License 2.0,
+     * credited in Sources), drawn as an outline like the TV's home screen draws it, in a box of size centred on (cx, cy).
+     */
     static void gear(Canvas cv, float cx, float cy, float size, int color) {
         cv.save();
         cv.translate(cx - size / 2, cy - size / 2);
-        cv.scale(size / 48f, size / 48f);
-        Paint p = stroke(color, 3);
-        p.setStrokeCap(Paint.Cap.BUTT);
-        cv.drawCircle(24, 24, 7, p);
-        float[][] l = {{24, 4, 24, 10}, {24, 38, 24, 44}, {4, 24, 10, 24}, {38, 24, 44, 24}, {9.9f, 9.9f, 14.1f, 14.1f},
-            {33.9f, 33.9f, 38.1f, 38.1f}, {9.9f, 38.1f, 14.1f, 33.9f}, {33.9f, 14.1f, 38.1f, 9.9f}};
-        for (float[] s : l) cv.drawLine(s[0], s[1], s[2], s[3], p);
+        cv.scale(size / 24f, size / 24f);
+        Paint p = stroke(color, 1.6f);
+        p.setStrokeJoin(Paint.Join.ROUND);
+        cv.drawPath(GEAR, p);
         cv.restore();
     }
+
+    /** Material Icons "settings" (24 units): the cog and its centre hole. */
+    static final String GEAR_SVG = "M19.14,12.94c0.04,-0.3 0.06,-0.61 0.06,-0.94c0,-0.32 -0.02,-0.64 -0.07,-0.94l2.03,-1.58"
+        + "c0.18,-0.14 0.23,-0.41 0.12,-0.61l-1.92,-3.32c-0.12,-0.22 -0.37,-0.29 -0.59,-0.22l-2.39,0.96c-0.5,-0.38 -1.03,-0.7 -1.62,-0.94"
+        + "L14.4,2.81c-0.04,-0.24 -0.24,-0.41 -0.48,-0.41h-3.84c-0.24,0 -0.43,0.17 -0.47,0.41L9.25,5.35C8.66,5.59 8.12,5.92 7.63,6.29"
+        + "L5.24,5.33c-0.22,-0.08 -0.47,0 -0.59,0.22L2.74,8.87C2.62,9.08 2.66,9.34 2.86,9.48l2.03,1.58C4.84,11.36 4.8,11.69 4.8,12"
+        + "s0.02,0.64 0.07,0.94l-2.03,1.58c-0.18,0.14 -0.23,0.41 -0.12,0.61l1.92,3.32c0.12,0.22 0.37,0.29 0.59,0.22l2.39,-0.96"
+        + "c0.5,0.38 1.03,0.7 1.62,0.94l0.36,2.54c0.05,0.24 0.24,0.41 0.48,0.41h3.84c0.24,0 0.44,-0.17 0.47,-0.41l0.36,-2.54"
+        + "c0.59,-0.24 1.13,-0.56 1.62,-0.94l2.39,0.96c0.22,0.08 0.47,0 0.59,-0.22l1.92,-3.32c0.12,-0.22 0.07,-0.47 -0.12,-0.61L19.14,12.94z"
+        + "M12,15.6c-1.98,0 -3.6,-1.62 -3.6,-3.6s1.62,-3.6 3.6,-3.6s3.6,1.62 3.6,3.6S13.98,15.6 12,15.6z";
+
+    private static final Path GEAR = svg(GEAR_SVG);
+
+    /** An SVG path (M L H V C S Z, absolute and relative) as a Path: enough for the icons drawn here. */
+    static Path svg(String d) {
+        Path p = new Path();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("[A-Za-z]|-?[0-9]*\\.?[0-9]+").matcher(d);
+        java.util.List<String> t = new java.util.ArrayList<>();
+        while (m.find()) t.add(m.group());
+        float x = 0, y = 0, sx = 0, sy = 0, cx2 = 0, cy2 = 0;
+        char cmd = 'M', prev = ' ';
+        int i = 0;
+        while (i < t.size()) {
+            String s = t.get(i);
+            if (Character.isLetter(s.charAt(0))) { cmd = s.charAt(0); i++; if (cmd == 'z' || cmd == 'Z') { p.close(); x = sx; y = sy; prev = cmd; continue; } }
+            boolean rel = Character.isLowerCase(cmd);
+            float ox = rel ? x : 0, oy = rel ? y : 0;
+            switch (Character.toUpperCase(cmd)) {
+                case 'M': x = ox + f(t, i); y = oy + f(t, i + 1); i += 2; p.moveTo(x, y); sx = x; sy = y; cmd = rel ? 'l' : 'L'; break;
+                case 'L': x = ox + f(t, i); y = oy + f(t, i + 1); i += 2; p.lineTo(x, y); break;
+                case 'H': x = ox + f(t, i); i++; p.lineTo(x, y); break;
+                case 'V': y = oy + f(t, i); i++; p.lineTo(x, y); break;
+                case 'C': {
+                    float x1 = ox + f(t, i), y1 = oy + f(t, i + 1);
+                    cx2 = ox + f(t, i + 2); cy2 = oy + f(t, i + 3); x = ox + f(t, i + 4); y = oy + f(t, i + 5); i += 6;
+                    p.cubicTo(x1, y1, cx2, cy2, x, y); break;
+                }
+                case 'S': {
+                    boolean after = "CcSs".indexOf(prev) >= 0;
+                    float x1 = after ? 2 * x - cx2 : x, y1 = after ? 2 * y - cy2 : y;
+                    cx2 = ox + f(t, i); cy2 = oy + f(t, i + 1); x = ox + f(t, i + 2); y = oy + f(t, i + 3); i += 4;
+                    p.cubicTo(x1, y1, cx2, cy2, x, y); break;
+                }
+                default: i++;
+            }
+            prev = cmd;
+        }
+        return p;
+    }
+
+    private static float f(java.util.List<String> t, int i) { return Float.parseFloat(t.get(i)); }
 
     /** The offline banner's cloud with a slash (a 32-unit line icon). */
     static void cloudOff(Canvas cv, float cx, float cy, float size, int color) {

@@ -20,9 +20,10 @@ import java.util.List;
  * bottom. Three rows on that symmetry: row A (centre y 77) holds the home club's name at the left safe edge and the
  * state (the day, LIVE, the outcome) in the gap; the middle (y 270) the crests at the safe edges and the hero between
  * them; row C (centre y 463) where to watch (or the date) in the gap and the away club's name at the right safe edge.
- * Each item in the gap is centred on the gap's axis at its own height, so the column slides down the diagonal. Nothing
- * comes closer than 24 px to a colour edge, the safe insets (56 / 44) or another item; the competition and a soon
- * match's date are in the launcher's title and description, as on every style.
+ * Each item in the gap is centred on the gap's axis at its own height, so the column slides down the diagonal. The
+ * competition is one quiet line in the gap between the state and the hero (LAYOUT-COMPETITION §7: the home club's
+ * name owns the top-left, where the other styles put it). Nothing comes closer than 24 px to a colour edge, the safe
+ * insets (56 / 44) or another item; a soon match's date is in the launcher's description, as on every style.
  */
 final class ClashStyle implements CardStyle {
     static final String ID = Appearance.CLASH;
@@ -67,6 +68,12 @@ final class ClashStyle implements CardStyle {
     static final float NAME = 56, NAME_TWO = 52, NAME_MIN = 48, NAME_FLOOR = 40, NAME_PITCH = 1.04f;
     /** The crests: 168 boxes at the safe edges on the middle line (158 when a field has a seam); 82 % of a disc. */
     static final float CREST = 168, DISC_CREST = 0.82f;
+    /**
+     * The competition: RC Regular caps (row C's voice) at 72 %, its capitals centred on y 166 and on the gap's axis
+     * there; 48 → 44 at .05, then 44 at .02, then the short name (C2) the same way; never under 44, never cut.
+     */
+    static final float COMP_CY = 166, COMP = 48, COMP_A = 0.72f;
+    static final float[][] COMP_STEPS = {{48, 0.05f}, {46, 0.05f}, {44, 0.05f}, {44, 0.02f}};
     /** Row C: where to watch through the shared channel line (RC Regular 48 → 44, logos ≤ 52 tall), or words (never under 44). */
     static final float FOOT = 48, FOOT_MIN = CardKit.CHANNEL_FLOOR, LOGO_H = 52, WORDS_A = 0.72f;
 
@@ -192,7 +199,10 @@ final class ClashStyle implements CardStyle {
         // 4. the gap: the state, the hero, where to watch
         boolean scores = m.scoreHero && m.homeScore != null && !m.scoresHidden;
         boolean hiddenScore = m.scoreHero && !scores;
-        String clockBelow = rowA(cv, m, hiddenScore);
+        float[] rowABottom = {ROW_A};
+        String clockBelow = rowA(cv, m, hiddenScore, rowABottom);
+        // a live card whose clock sits under the score would hold six rows of type in the gap: no competition there
+        if (clockBelow.isEmpty()) competition(cv, m, rowABottom[0]);
         float above = hero(cv, m, scores, hiddenScore);
         if (!clockBelow.isEmpty()) above = clock(cv, clockBelow, above);
         rowC(cv, m, art, above);
@@ -350,9 +360,10 @@ final class ClashStyle implements CardStyle {
      * Row A in the gap: LIVE as the red pill with the clock (● LIVE 67′; when the clock doesn't fit, ● LIVE and the clock
      * goes under the score, as on the Ticket); a result's outcome pill (WIN / DRAW / LOSS; FINAL when scores are hidden
      * or the outcome unknown); otherwise the state's words (TOMORROW, SUN 22 NOV, DELAYED, POSTPONED, NO RESULT YET).
-     * Returns the clock to set under the score, or "".
+     * Returns the clock to set under the score, or ""; bottom[0]: row A's foot (y).
      */
-    private static String rowA(Canvas cv, CardModel m, boolean hiddenScore) {
+    private static String rowA(Canvas cv, CardModel m, boolean hiddenScore, float[] bottom) {
+        bottom[0] = ROW_A + PILL_H / 2;
         float max = room(PILL_H);
         if (m.state == CardModel.State.LIVE) {
             String s = CardKit.liveText(m), clock = "";
@@ -368,8 +379,25 @@ final class ClashStyle implements CardStyle {
             CardKit.outcomePill(cv, m, axis(ROW_A) - w / 2, ROW_A, PILL_H, size, false);
             return "";
         }
-        words(cv, m.stateLine, ROW_A, true, CardKit.alpha(CardKit.WHITE, WORD_A), 0);
+        bottom[0] = words(cv, m.stateLine, ROW_A, true, CardKit.alpha(CardKit.WHITE, WORD_A), 0);
         return "";
+    }
+
+    /**
+     * The competition under row A, over the hero (LAYOUT-COMPETITION §7), in the gap's room at its height (24 px square
+     * to both colour edges). Not drawn when row A's state is set on two lines (ΟΡΙΣΤ. ΔΙΑΚΟΠΗ, NO RESULT YET): its
+     * second line is in this slot. above: row A's foot.
+     */
+    private static void competition(Canvas cv, CardModel m, float above) {
+        Paint p = CardKit.text(Ui.COND, COMP, CardKit.alpha(CardKit.WHITE, COMP_A));
+        p.setFontFeatureSettings(null);
+        float cap0 = CardKit.cap(p);
+        if (COMP_CY - cap0 / 2 - above < CLEAR) return;
+        CardKit.CompFit f = CardKit.fitComp(CardKit.measure(p), CardKit.caps(m.compNames), room(cap0), COMP_STEPS);
+        if (f == null) return;
+        p.setTextSize(f.size);
+        p.setLetterSpacing(f.track);
+        CardKit.drawLeftInk(cv, p, f.text, axis(COMP_CY) - CardKit.inkWidth(p, f.text) / 2, COMP_CY + CardKit.cap(p) / 2);
     }
 
     private static float pillSize(String s, boolean dot, float max) {

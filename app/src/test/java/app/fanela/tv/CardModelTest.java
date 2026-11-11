@@ -29,6 +29,76 @@ public class CardModelTest {
         return m;
     }
 
+    // ---------- the competition's names on a card (LAYOUT-COMPETITION §2) ----------
+
+    @Test public void theCompetitionDropsItsStage() {
+        assertEquals(java.util.Arrays.asList("Champions League", "Champions"), CardModel.compNames("uefa.champions_qual"));
+        assertEquals(java.util.Arrays.asList("Champions League", "Champions"), CardModel.compNames("uefa.champions"));
+        assertEquals(java.util.Arrays.asList("EuroLeague"), CardModel.compNames("euroleague.ff"));
+        assertEquals(java.util.Arrays.asList("EuroLeague"), CardModel.compNames("euroleague.po"));
+        assertEquals(java.util.Arrays.asList("EuroLeague"), CardModel.compNames("euroleague.pi"));
+        assertEquals(java.util.Arrays.asList("Europa League", "Europa"), CardModel.compNames("uefa.europa_qual"));
+        assertEquals(java.util.Arrays.asList("Conference League", "Conference"), CardModel.compNames("uefa.europa.conf_qual"));
+        I18n.use("el");
+        assertEquals(java.util.Arrays.asList("Champions League", "Champions"), CardModel.compNames("uefa.champions_qual"));
+        assertEquals(java.util.Arrays.asList("Conference League", "Conference"), CardModel.compNames("uefa.europa.conf"));
+    }
+
+    /** Never "Greek Super League" on a card, abroad too: the card sits in the club's own row. */
+    @Test public void greekLeaguesHaveNoCountryEvenAbroad() {
+        I18n.region("GB");
+        try {
+            assertEquals("the description keeps it", "Greek Super League", I18n.comp("gre.1"));
+            assertEquals(java.util.Arrays.asList("Super League"), CardModel.compNames("gre.1"));
+            assertEquals(java.util.Arrays.asList("Basket League"), CardModel.compNames("gbl"));
+            assertEquals(java.util.Arrays.asList("Greek Cup"), CardModel.compNames("gbl.cup"));
+        } finally {
+            I18n.region("GR");
+        }
+        assertEquals(java.util.Arrays.asList("Super League"), CardModel.compNames("gre.1"));
+    }
+
+    /** Cups: Κύπελλο alone in Greek (the row tells the sport); Greek Cup in English, where "Cup" alone is no name. */
+    @Test public void cupsAreKypelloOrGreekCup() {
+        assertEquals(java.util.Arrays.asList("Greek Cup"), CardModel.compNames("gre.cup"));
+        assertEquals(java.util.Arrays.asList("Greek Cup"), CardModel.compNames("gbl.cup"));
+        assertEquals(java.util.Arrays.asList("Greek Super Cup", "Super Cup"), CardModel.compNames("gre.super_cup"));
+        assertEquals(java.util.Arrays.asList("Friendly"), CardModel.compNames("club.friendly"));
+        I18n.use("el");
+        assertEquals(java.util.Arrays.asList("Κύπελλο"), CardModel.compNames("gre.cup"));
+        assertEquals(java.util.Arrays.asList("Κύπελλο"), CardModel.compNames("gbl.cup"));
+        assertEquals("C2 only where it differs", java.util.Arrays.asList("Super Cup"), CardModel.compNames("gre.super_cup"));
+        assertEquals(java.util.Arrays.asList("Φιλικό"), CardModel.compNames("club.friendly"));
+        assertEquals("ΚΥΠΕΛΛΟ", Cards.caps("Κύπελλο"));
+        assertEquals("ΦΙΛΙΚΟ", Cards.caps("Φιλικό"));
+    }
+
+    @Test public void shortFormsAreWhatFansSayOrTheBrandsOwnInitials() {
+        assertEquals(java.util.Arrays.asList("BCL"), CardModel.compNames("bcl"));
+        assertEquals(java.util.Arrays.asList("Basketbol Süper Ligi", "BSL"), CardModel.compNames("tur.bsl"));
+        assertEquals(java.util.Arrays.asList("FIBA Europe Cup", "Europe Cup"), CardModel.compNames("fiba.europe_cup"));
+        assertEquals(java.util.Arrays.asList("UEFA Super Cup", "Super Cup"), CardModel.compNames("uefa.super_cup"));
+        assertEquals(java.util.Arrays.asList("Concacaf Champions Cup", "Champions Cup"), CardModel.compNames("concacaf.champions"));
+        assertEquals(java.util.Arrays.asList("AFC Champions League", "AFC Champions"), CardModel.compNames("afc.champions"));
+        assertEquals(java.util.Arrays.asList("EuroCup"), CardModel.compNames("eurocup"));
+    }
+
+    /** Every other id: its I18n name, no short form; ESPN's own name for one Fanela has no label for; none for none. */
+    @Test public void otherCompetitionsKeepTheirNameAndNoneIsEmpty() {
+        assertEquals(java.util.Arrays.asList("Premier League"), CardModel.compNames("eng.1"));
+        assertEquals(java.util.Arrays.asList("Copa del Rey"), CardModel.compNames("esp.copa_del_rey"));
+        assertEquals(java.util.Arrays.asList("Scottish Premiership"), CardModel.compNames("Scottish Premiership"));
+        assertEquals(java.util.Arrays.asList("Allsvenskan"), CardModel.compNames("Allsvenskan · Relegation"));
+        assertTrue(CardModel.compNames(null).isEmpty());
+        assertTrue(CardModel.compNames("").isEmpty());
+        // the model carries them; the description keeps the full name
+        Match m = next(at(1, 21, 15));
+        m.comp = "uefa.champions_qual";
+        CardModel c = CardModel.of(m, true, false, at(0, 12, 0));
+        assertEquals(java.util.Arrays.asList("Champions League", "Champions"), c.compNames);
+        assertEquals("Champions League · qual.", I18n.comp(m.comp));
+    }
+
     @Test public void tomorrowIsTheStateLineWithTheDateBesideIt() {
         long noon = at(0, 12, 0);
         CardModel c = CardModel.of(next(at(1, 21, 15)), true, false, noon);

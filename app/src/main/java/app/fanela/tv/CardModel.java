@@ -64,11 +64,15 @@ final class CardModel {
     /** The names a style may set for each club, longest first (CardModel.names: the card name, then its short form). */
     List<String> opponentNames = new ArrayList<>(), mineNames = new ArrayList<>();
     String myCrest, oppCrest;
-    /** The competition, display capitals. */
-    String competition = "";
+    /**
+     * The competition's names for the card (compNames): mixed case, longest first, [C1] or [C1, C2]; empty when the
+     * match has none. Styles draw them in capitals (Cards.caps), Clean as written; the launcher's title and
+     * description keep the full name (I18n.comp), its stage and country included.
+     */
+    List<String> compNames = new ArrayList<>();
     /** The sport: "FC" football, "BC" basketball. */
     String team = "FC";
-    /** The data couldn't be refreshed for a while (shown as a warning in place of the competition). */
+    /** The data couldn't be refreshed for a while: the amber warning in place of the channel or the date (the Ticket: of its eyebrow). */
     boolean stale;
     /** Where to watch; null on results, postponed matches and when nothing is known (the line is then omitted). */
     Channel channel;
@@ -111,6 +115,55 @@ final class CardModel {
         {"et_ht", "ET HT", "ΗΜ. ΠΑΡ."}, {"et", "ET", "ΠΑΡ."}, {"break", "BREAK", "ΔΙΑΛΕΙΜΜΑ"},
     };
 
+    // ---------- the competition on a card (LAYOUT-COMPETITION §2) ----------
+    /**
+     * The card's names for a competition: ids (space-separated), C1 in Greek, C1 in English, C2 in Greek, C2 in English
+     * ("" for none). C2 is what fans say ("Champions", "the Conference"), used only where C1 doesn't fit. No country
+     * (the card sits in the club's own row: SUPER LEAGUE can't be mistaken), no stage (the description keeps both).
+     */
+    private static final String[][] COMP = {
+        {"gre.1", "Super League", "Super League", "", ""},
+        {"gre.cup gbl.cup", "Κύπελλο", "Greek Cup", "", ""},
+        {"gre.super_cup", "Super Cup", "Greek Super Cup", "", "Super Cup"},
+        {"uefa.champions uefa.champions_qual", "Champions League", "Champions League", "Champions", "Champions"},
+        {"uefa.europa uefa.europa_qual", "Europa League", "Europa League", "Europa", "Europa"},
+        {"uefa.europa.conf uefa.europa.conf_qual", "Conference League", "Conference League", "Conference", "Conference"},
+        {"uefa.super_cup", "UEFA Super Cup", "UEFA Super Cup", "Super Cup", "Super Cup"},
+        {"club.friendly", "Φιλικό", "Friendly", "", ""},
+        {"euroleague euroleague.po euroleague.ff euroleague.pi", "EuroLeague", "EuroLeague", "", ""},
+        {"eurocup", "EuroCup", "EuroCup", "", ""},
+        {"gbl", "Basket League", "Basket League", "", ""},
+        {"bcl", "BCL", "BCL", "", ""},
+        {"fiba.europe_cup", "FIBA Europe Cup", "FIBA Europe Cup", "Europe Cup", "Europe Cup"},
+        {"tur.bsl", "Basketbol Süper Ligi", "Basketbol Süper Ligi", "BSL", "BSL"},
+        {"concacaf.champions", "Concacaf Champions Cup", "Concacaf Champions Cup", "Champions Cup", "Champions Cup"},
+        {"afc.champions", "AFC Champions League", "AFC Champions League", "AFC Champions", "AFC Champions"},
+    };
+
+    /**
+     * The competition's names on a card, in the viewer's language, mixed case, longest first: [C1] or [C1, C2]; empty
+     * for none. An id the table doesn't list is its I18n.comp name (ESPN's own name for a league Fanela has no label
+     * for) with any stage cut at " · ". Pure: unit-tested.
+     */
+    static List<String> compNames(String id) {
+        List<String> out = new ArrayList<>();
+        if (id == null || id.trim().isEmpty()) return out;
+        boolean el = I18n.el();
+        for (String[] r : COMP) {
+            if (!(" " + r[0] + " ").contains(" " + id + " ")) continue;
+            out.add(el ? r[1] : r[2]);
+            String c2 = el ? r[3] : r[4];
+            if (!c2.isEmpty() && !c2.equals(out.get(0))) out.add(c2);
+            return out;
+        }
+        String n = I18n.comp(id);
+        int dot = n.indexOf(" · ");
+        if (dot >= 0) n = n.substring(0, dot);
+        n = n.trim();
+        if (!n.isEmpty()) out.add(n);
+        return out;
+    }
+
     /** A word of the card vocabulary in the interface's language. */
     static String w(String key) {
         for (String[] r : WORDS) if (r[0].equals(key)) return I18n.el() ? r[2] : r[1];
@@ -144,7 +197,7 @@ final class CardModel {
         c.opponentNames = names(c.opponent);
         c.myCrest = m.clubHome() ? m.homeCrest : m.awayCrest;
         c.oppCrest = m.clubHome() ? m.awayCrest : m.homeCrest;
-        c.competition = Cards.caps(I18n.comp(m.comp));
+        c.compNames = compNames(m.comp);
         c.tbd = m.tbd;
 
         boolean abandoned = "ABANDONED".equals(m.detail);

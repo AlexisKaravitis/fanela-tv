@@ -63,7 +63,26 @@ public class CleanStyleTest {
         // the grid itself: plates 188 at 56 from either edge, the hero's 424 between them
         assertEquals(150f, CleanStyle.PLATE_L_CX, 0); assertEquals(810f, CleanStyle.PLATE_R_CX, 0);
         assertEquals(424f, CleanStyle.HERO_BOX, 0);
-        assertEquals(324f, CleanStyle.NAME_TOP, 0);
+        // LAYOUT-COMPETITION §6: the plates 18 px lower (y 134–322), the names 20 under them
+        assertEquals(134f, CleanStyle.PLATE_TOP, 0);
+        assertEquals(228f, CleanStyle.PLATE_CY, 0);
+        assertEquals(342f, CleanStyle.NAME_TOP, 0);
+        assertEquals(320f, CleanStyle.LIGHT_CY, 0);
+    }
+
+    /** LAYOUT-COMPETITION §6: the header's two ends are the plates' outer edges; a 66 px pill keeps 24 px over a plate. */
+    @Test public void theHeaderRunsFromPlateEdgeToPlateEdge() {
+        assertEquals(CleanStyle.PLATE_IN, CleanStyle.COMP_X, 0);
+        assertEquals(Cards.W - CleanStyle.PLATE_IN, CleanStyle.PILL_R, 0);
+        assertEquals(24f, CleanStyle.PLATE_TOP - (CleanStyle.PILL_CY + CleanStyle.PILL_H / 2), 0);
+        assertEquals(44f, CleanStyle.PILL_MIN, 0);
+        assertEquals(32f, CleanStyle.COMP_GAP, 0);
+        // the competition at 66 %; 80 % under a bright (yellow) light, the same on every card of the club's row
+        assertEquals(0.66f, CleanStyle.compAlpha(club(OLY, WHITE)), 0);
+        assertEquals(0.66f, CleanStyle.compAlpha(club(PAOK, WHITE)), 0);
+        assertEquals(0.66f, CleanStyle.compAlpha(club(REAL, 0xFF2B3990)), 0);
+        assertEquals(0.66f, CleanStyle.compAlpha(club(0xFF007A3D, WHITE)), 0);
+        assertEquals(0.80f, CleanStyle.compAlpha(club(0xFFF5C800, 0xFF111111)), 0);
     }
 
     /** The one pill says the day, LIVE with the clock, the outcome (FINAL when hidden), or the state word. */

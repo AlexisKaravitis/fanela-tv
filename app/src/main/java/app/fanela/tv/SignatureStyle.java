@@ -14,9 +14,10 @@ import android.graphics.Shader;
  * Signature, the default card (spec: design/spec/cards/SPEC-CARDS.md §3.1, gen.py signature()). One dark platter lit
  * from the left by the club's colour, the club's crest as a ghost bleeding off the left and bottom and fading out to
  * the right under a horizontal scrim, and a right-aligned four-line stack at x = 902: the state, the opponent, the hero
- * (kick-off or score) and where to watch. Every line carries one fact (the competition and the date of a soon match
- * live in the launcher's description under the focused card), and the four sit on one baseline grid, 24 px apart at
- * least, so the card stays calm at the launcher's unfocused 388 x 218. A club without a sharp crest is drawn by Kit.
+ * (kick-off or score) and where to watch (or a result's date). Every line carries one fact, and the four sit on one
+ * baseline grid, 24 px apart at least, so the card stays calm at the launcher's unfocused 388 x 218. The first line is
+ * a header band (LAYOUT-COMPETITION §4): the competition, quiet, at the left safe edge; the state at the right. A club
+ * without a sharp crest is drawn by Kit.
  */
 final class SignatureStyle implements CardStyle {
     static final String ID = Appearance.SIGNATURE;
@@ -31,7 +32,8 @@ final class SignatureStyle implements CardStyle {
 
     public void draw(Context c, Canvas cv, CardModel m, ClubTokens t, CardArt art) {
         platter(cv, t, art.ghostCrest());  // the ghost: the club's best crest (discs keep the match's)
-        stateLine(cv, m);
+        float stateW = stateLine(cv, m);
+        competition(cv, m, stateW);
         opponent(cv, m, art.oppCrest(), oppCy(m.state));
         hero(cv, m);
         foot(cv, m, art);
@@ -65,6 +67,12 @@ final class SignatureStyle implements CardStyle {
         for (int i = 0; i < sc.length; i++) sc[i] = ClubTokens.alpha(t.field, SCRIM_A[i]);
         p.setShader(new LinearGradient(0, 0, Cards.W, 0, sc, SCRIM_AT, Shader.TileMode.CLAMP));
         cv.drawRect(0, 0, Cards.W, Cards.H, p);
+        // the top scrim in the field colour: the ghost fades in under the header as it fades out to the right, so the
+        // competition never sits on the crest's lettering
+        p.setShader(new LinearGradient(0, 0, 0, TOP_SCRIM_H,
+            new int[]{ClubTokens.alpha(t.field, TOP_SCRIM_A), ClubTokens.alpha(t.field, TOP_SCRIM_A), ClubTokens.alpha(t.field, 0)},
+            new float[]{0, TOP_SCRIM_FLAT / TOP_SCRIM_H, 1}, Shader.TileMode.CLAMP));
+        cv.drawRect(0, 0, Cards.W, TOP_SCRIM_H, p);
         // vertical scrim: black 0 at y 346, .30 at 475, .42 at 540
         p.setShader(new LinearGradient(0, 0, 0, Cards.H,
             new int[]{0, 0, ClubTokens.alpha(0xFF000000, 0.30), ClubTokens.alpha(0xFF000000, 0.42)},
@@ -79,6 +87,9 @@ final class SignatureStyle implements CardStyle {
      */
     static final float[] SCRIM_AT = {0, 0.20f, 0.44f, 1}, SCRIM_A = {0, 0, 0.86f, 0.92f};
 
+    /** The top scrim (LAYOUT-COMPETITION §4): the field colour at .90 over y 0–96, fading to nothing at y 160. */
+    static final float TOP_SCRIM_A = 0.90f, TOP_SCRIM_FLAT = 96, TOP_SCRIM_H = 160;
+
     /**
      * The crest contained in 620 x 620 at (-170, top), drawn with a plain paint alpha: a colour filter would take the
      * software canvas off its fast bitmap path (measured 50–145 ms against ~5 ms on the emulator).
@@ -92,11 +103,12 @@ final class SignatureStyle implements CardStyle {
         Cards.drawBitmap(cv, crest, new RectF(l, tp, l + w, tp + h), p);
     }
 
-    // ---------- 6: the state line (box top 40, h 66) ----------
+    // ---------- 6: the header: the state at the right (box top 40, h 66), the competition at the left ----------
 
     /**
-     * The state line: GS Bold 56 (52 in the spec, raised for the launcher's unfocused scale, 0.404: 23 px on the TV),
-     * fit 640, min 44, its capitals y 48–88 (the safe top is 44); the opponent's squircle starts 24 below.
+     * The state: GS Bold 56 (52 in the spec, raised for the launcher's unfocused scale, 0.404: 23 px on the TV), the
+     * main words only (a result's date is on line 4), fit 640, min 44, its capitals y 48–88 (the safe top is 44); the
+     * opponent's squircle starts 24 below.
      */
     static final float STATE_CY = 68, STATE_SIZE = 56, STATE_MIN = 44;
 
@@ -111,73 +123,44 @@ final class SignatureStyle implements CardStyle {
     /** The opponent line's centre: 182, or 204 under the LIVE pill. */
     static float oppCy(CardModel.State s) { return s == CardModel.State.LIVE ? LIVE_OPP_CY : OPP_CY; }
 
-    private static void stateLine(Canvas cv, CardModel m) {
-        if (m.state == CardModel.State.LIVE) {  // only a match in play is drawn as live (not awaiting, not suspended)
-            CardKit.livePill(cv, m, RIGHT, LIVE_PILL_CY, 66, 48, true);
-            return;
-        }
+    /** Draws the state at the right safe edge; returns its width (the pill's on LIVE). */
+    private static float stateLine(Canvas cv, CardModel m) {
+        if (m.state == CardModel.State.LIVE)  // only a match in play is drawn as live (not awaiting, not suspended)
+            return CardKit.livePill(cv, m, RIGHT, LIVE_PILL_CY, 66, 48, true);
         // proportional figures here (as in the renders): Google Sans's tabular setting also widens its spaces
-        Paint main = CardKit.text(Ui.BOLD, STATE_SIZE, CardKit.WHITE);
+        final Paint main = CardKit.text(Ui.BOLD, STATE_SIZE, CardKit.WHITE);
         main.setLetterSpacing(0.04f);
         main.setFontFeatureSettings(null);
-        final String sub0 = secondary(m);
-        String sub = sub0;
-        Paint sp = CardKit.text(Ui.MEDIUM, STATE_SIZE, CardKit.alpha(CardKit.WHITE, m.dateDim ? 0.40f : 0.66f));
-        sp.setLetterSpacing(0.03f);
-        sp.setFontFeatureSettings(null);
-        float size = stateSize(w -> stateWidth(main, sp, m.stateLine, w ? sub0 : ""), main, sp, sub0.isEmpty());
-        if (size < 0) { sub = ""; size = -size; }  // two segments would go under 48: the main words alone
-        float base = STATE_CY + 0.346f * size;  // measured: caps y 53–91 at 52 px
-        float x = RIGHT;
-        if (!sub.isEmpty()) {
-            CardKit.right(cv, sp, sub, x, base);
-            x -= sp.measureText(sub) + 16;
-        }
-        CardKit.right(cv, main, m.stateLine, x, base);
+        float size = stateSize(sz -> { main.setTextSize(sz); return main.measureText(m.stateLine); }, STATE_SIZE, STATE_MIN, 640);
+        main.setTextSize(size);
+        CardKit.right(cv, main, m.stateLine, RIGHT, STATE_CY + 0.346f * size);  // measured: caps y 53–91 at 52 px
+        return main.measureText(m.stateLine);
     }
 
-    /** "· FRI 6 NOV", "· AET · FRI 6 NOV", "· SUN 22 NOV" (dimmed when postponed); "" for none. */
-    static String secondary(CardModel m) {
-        if (m.dateLine.isEmpty() && m.stateExtra.isEmpty()) return "";
-        StringBuilder b = new StringBuilder("·");
-        if (!m.stateExtra.isEmpty()) b.append(' ').append(m.stateExtra).append(m.dateLine.isEmpty() ? "" : " ·");
-        if (!m.dateLine.isEmpty()) b.append(' ').append(m.dateLine);
-        return b.toString();
+    /** A line's width at a size. */
+    interface SizeWidth { float at(float size); }
+
+    /**
+     * The state's size (Signature, Kit): from start, 2 px a step, until it fits max, never under min. The state is the
+     * main words alone: the secondary segment (a result's date, AET, a delayed match's day) left the header for line 4
+     * or the launcher's description (LAYOUT-COMPETITION §4). Pure: unit-tested.
+     */
+    static float stateSize(SizeWidth width, float start, float min, float max) {
+        float size = start;
+        while (size > min && width.at(size) > max) size -= 2;
+        return size;
     }
 
     /**
-     * The state line's size: both segments together from 56 while that stays at 48 or more (STATE_KEEP); under that
-     * the secondary segment goes (ΚΑΘΥΣΤΕΡΗΣΗ · ΣΗΜΕΡΑ became 40 in Kit; the launcher's description gives the day, as
-     * Clean's pill does) and the main words fit alone, to the style's minimum. Returns the size, negated when the
-     * secondary segment is dropped. width(true): both segments at the paints' size; width(false): the main alone.
+     * The competition in the header (LAYOUT-COMPETITION §4): its ink from the left safe edge (56), on the state line's
+     * baseline at 56 (87.4, its capitals y 53–87) whatever the state's size; on LIVE its capitals centred on the pill's
+     * centre (y 77). 40 px from the state at least: it gives way (smaller, C2, gone), the state never does.
      */
-    static float stateSize(StateWidth width, Paint main, Paint sub, boolean single) {
-        return stateSize(width, size -> { main.setTextSize(size); sub.setTextSize(size); }, STATE_SIZE, STATE_KEEP, STATE_MIN, 640, single);
-    }
+    static final float COMP_BASE = STATE_CY + 0.346f * STATE_SIZE, COMP_X = 56, COMP_GAP = 40;
 
-    /** The minimum both segments of the state line keep together; under it the secondary segment is dropped. */
-    static final float STATE_KEEP = 48;
-
-    interface StateWidth { float at(boolean both); }
-
-    interface Sizer { void set(float size); }
-
-    /** As above, for any style (Kit: 602 wide, min 40): pure stepping over width and sizer, so it is unit-tested. */
-    static float stateSize(StateWidth width, Sizer sizer, float start, float keep, float min, float max, boolean single) {
-        float size = start;
-        sizer.set(size);
-        if (!single) {
-            while (size > keep && width.at(true) > max) sizer.set(size -= 2);
-            if (width.at(true) <= max) return size;
-            size = start;
-            sizer.set(size);
-        }
-        while (size > min && width.at(false) > max) sizer.set(size -= 2);
-        return single ? size : -size;
-    }
-
-    private static float stateWidth(Paint main, Paint sub, String a, String b) {
-        return main.measureText(a) + (b.isEmpty() ? 0 : 16 + sub.measureText(b));
+    private static void competition(Canvas cv, CardModel m, float stateW) {
+        boolean live = m.state == CardModel.State.LIVE;
+        CardKit.headerComp(cv, m, COMP_X, live ? Float.NaN : COMP_BASE, LIVE_PILL_CY, (RIGHT - COMP_X) - COMP_GAP - stateW);
     }
 
     // ---------- 7: the opponent line (centre y 182) ----------
@@ -293,11 +276,11 @@ final class SignatureStyle implements CardStyle {
     // ---------- 9: line 4 (centre y 470): where to watch ----------
 
     /**
-     * Line 4 carries one fact: where to watch (RC Regular 56, 23 px at the launcher's 0.404; LIKELY before the logo,
-     * the number chip after it; fit 640 with the logo capped at 240 → 200 → 180, then the type down to 44, then
-     * without LIKELY; a logo that wouldn't read at 44 px set as the channel's name: CardKit.fitChannel), or the
-     * not-updated warning in amber when the data is stale. Results, postponed, awaiting and suspended matches have no
-     * channel and no line 4. The competition is not drawn: the launcher's description names it under the focused card.
+     * Line 4 carries one fact, where or when: where to watch before and during a match (RC Regular 56, 23 px at the
+     * launcher's 0.404; LIKELY before the logo, the number chip after it; fit 640 with the logo capped at 240 → 200 →
+     * 180, then the type down to 44, then without LIKELY; a logo that wouldn't read at 44 px set as the channel's name:
+     * CardKit.fitChannel); the date of a result (AET · FRI 6 NOV, YESTERDAY), a postponed (45 %) or abandoned match
+     * (dateFoot); or the not-updated warning in amber when the data is stale. Awaiting and suspended: no line 4.
      */
     /**
      * Line 4's logo box (and number chip) is 48 tall, y 446-494: at 56 (y 442-498) it came 21 px under the hero's
@@ -307,6 +290,7 @@ final class SignatureStyle implements CardStyle {
 
     private static void foot(Canvas cv, CardModel m, CardArt art) {
         if (m.stale) { staleLine(cv, RIGHT, FOOT_CY, FOOT_SIZE, true); return; }
+        if (!footDate(m).isEmpty()) { dateFoot(cv, m, RIGHT, FOOT_CY, true, FOOT_W); return; }
         if (m.channel == null) return;
         // the shared fit (CardKit.fitChannel): 56 → 44 as written, then without LIKELY ("/" between names), then untracked
         CardKit.ChannelSet s = CardKit.fitChannel(m, art, FOOT_SIZE, FOOT_W, LOGO_H);
@@ -318,6 +302,29 @@ final class SignatureStyle implements CardStyle {
 
     /** Line 4's width (x 262–902). */
     static final float FOOT_W = 640;
+
+    /** Line 4's date (Signature and Kit): a result's (with AET / PENS), a postponed or abandoned match's; else "". */
+    static String footDate(CardModel m) {
+        if (m.state == CardModel.State.RESULT)
+            return m.stateExtra.isEmpty() ? m.dateLine : m.dateLine.isEmpty() ? m.stateExtra : m.stateExtra + " · " + m.dateLine;
+        if (m.state == CardModel.State.OFF) return m.dateLine;
+        return "";
+    }
+
+    /**
+     * The date on line 4: RC Regular 56, tracking .05, white 72 % (45 % for a postponed match's original date), its
+     * capitals centred on cy, its ink ending at x (alignRight) or starting there; fit max, never under 44.
+     */
+    static void dateFoot(Canvas cv, CardModel m, float x, float cy, boolean alignRight, float max) {
+        String s = footDate(m);
+        Paint p = CardKit.text(Ui.COND, FOOT_SIZE, CardKit.alpha(CardKit.WHITE, m.dateDim ? 0.45f : 0.72f));
+        p.setFontFeatureSettings(null);
+        p.setLetterSpacing(0.05f);
+        float size = FOOT_SIZE;
+        while (size > CardKit.COMP_MIN && CardKit.inkWidth(p, s) > max) p.setTextSize(size -= 2);
+        float base = cy + CardKit.cap(p) / 2;
+        if (alignRight) CardKit.drawRightInk(cv, p, s, x, base); else CardKit.drawLeftInk(cv, p, s, x, base);
+    }
 
     /** The not-updated warning: an amber sign and the words, RC Regular, on centre line cy, right-aligned at x (or from x). */
     static void staleLine(Canvas cv, float x, float cy, float size, boolean alignRight) {

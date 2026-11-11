@@ -6,26 +6,37 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-/** Signature's pure rules: the line-4 fit cascade (spec §1.6), the state line's segment, the ghost's height. */
+/** Signature's pure rules: the line-4 fit cascade (spec §1.6), the header's state, line 4's date, the ghost's height. */
 public class SignatureStyleTest {
     /** A line of text that is `perPx` wide per px of size, a logo up to its cap, and a competition of `comp` per px. */
     static SignatureStyle.Fit.Width line(float perPx, float logo, float comp) {
         return (size, cap, withComp) -> size * perPx + Math.min(logo, cap) + (withComp ? size * comp : 0);
     }
 
-    @Test public void aStateLineKeeps48OrDropsItsSecondSegment() {
-        // a fake: the main words 6 per px of size, the second segment 6 more; the line 640
-        final float[] size = {56};
-        SignatureStyle.Sizer sizer = s -> size[0] = s;
-        // 12 x 52 = 624 fits at 52: both kept
-        float s = SignatureStyle.stateSize(both -> size[0] * (both ? 12 : 6), sizer, 56, 48, 44, 640, false);
-        assertEquals(52, s, 0);
-        // 16 x 48 = 768 > 640: the second goes, the main words alone at 56 (8 x 56 = 448), the sign says so
-        s = SignatureStyle.stateSize(both -> size[0] * (both ? 16 : 8), sizer, 56, 48, 44, 640, false);
-        assertEquals(-56, s, 0);
-        // a main word alone shrinks to fit, never under the style's minimum (Kit: 40) even when it overflows there
-        s = SignatureStyle.stateSize(both -> size[0] * 15.5f, sizer, 56, 48, 40, 602, true);
-        assertEquals(40, s, 0);
+    /**
+     * LAYOUT-COMPETITION §4: the state is the main words alone (its date went to line 4), 56 while it fits, 2 px a step
+     * to the style's minimum, 44 in Signature and in Kit (it was 40 in Kit), never under it even when it overflows there.
+     */
+    @Test public void theStateIsItsMainWordsAloneFittedTo44() {
+        // a fake: 8 per px of size in 640: 448 at 56, kept
+        assertEquals(56, SignatureStyle.stateSize(size -> size * 8, 56, 44, 640), 0);
+        // 12 per px: 672 at 56, 624 at 52
+        assertEquals(52, SignatureStyle.stateSize(size -> size * 12, 56, 44, 640), 0);
+        // Kit's 602 column, 15.5 per px: too wide even at 44, which it keeps
+        assertEquals(44, SignatureStyle.stateSize(size -> size * 15.5f, 56, KitStyle.STATE_MIN, 602), 0);
+        assertEquals(44, KitStyle.STATE_MIN, 0);
+        assertEquals(44, SignatureStyle.STATE_MIN, 0);
+    }
+
+    /** The header: the competition from the left safe edge on the state line's baseline at 56, 40 px from the state. */
+    @Test public void theCompetitionSitsOnTheStateLinesBaselineAtTheLeftEdge() {
+        assertEquals(87.4f, SignatureStyle.COMP_BASE, 0.05f);
+        assertEquals(56, SignatureStyle.COMP_X, 0);
+        assertEquals(40, SignatureStyle.COMP_GAP, 0);
+        // the top scrim: the field at .90 to y 96, nothing from y 160 (it ends over the opponent's squircle, y 112)
+        assertEquals(0.90f, SignatureStyle.TOP_SCRIM_A, 0);
+        assertEquals(96, SignatureStyle.TOP_SCRIM_FLAT, 0);
+        assertEquals(160, SignatureStyle.TOP_SCRIM_H, 0);
     }
 
     @Test public void aLineThatFitsKeepsItsStartSize() {
@@ -73,13 +84,23 @@ public class SignatureStyleTest {
         assertEquals(38, f.size, 0);
     }
 
-    @Test public void theSecondarySegmentJoinsExtraAndDate() {
+    /** A result's date (AET or PENS before it), a postponed or abandoned match's: on line 4, never in the header. */
+    @Test public void lineFourCarriesTheDateOfAResultOrAnOffMatch() {
         CardModel m = new CardModel();
-        assertEquals("", SignatureStyle.secondary(m));
+        m.state = CardModel.State.RESULT;
         m.dateLine = "FRI 6 NOV";
-        assertEquals("· FRI 6 NOV", SignatureStyle.secondary(m));
+        assertEquals("FRI 6 NOV", SignatureStyle.footDate(m));
         m.stateExtra = "AET";
-        assertEquals("· AET · FRI 6 NOV", SignatureStyle.secondary(m));
+        assertEquals("AET · FRI 6 NOV", SignatureStyle.footDate(m));
+        m = new CardModel();
+        m.state = CardModel.State.OFF; m.dateLine = "SUN 22 NOV"; m.dateDim = true;
+        assertEquals("SUN 22 NOV", SignatureStyle.footDate(m));
+        // a delayed match's day stays in the description: line 4 is its channel
+        m = new CardModel();
+        m.state = CardModel.State.NEXT; m.stateLine = "DELAYED"; m.dateLine = "TODAY";
+        assertEquals("", SignatureStyle.footDate(m));
+        m.state = CardModel.State.AWAITING; m.dateLine = "";
+        assertEquals("", SignatureStyle.footDate(m));
     }
 
     /** Owner, fx6: the ghost sat lower on results, so a row's crests had different heights; one position now. */

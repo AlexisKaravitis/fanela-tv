@@ -13,9 +13,11 @@ import android.graphics.Typeface;
  * band 270 wide, symmetrical like a shirt's front: the stripes centred on its centre line (five, the same for every
  * striped club), my crest on an ivory disc on that line and on the card's middle, as a crest on the chest (owner,
  * fx6). The band is shaded like a torso, darker at both sides, and ends in a clean edge 30 px before the type; the
- * four lines of the shared grammar stand left-aligned from x = 300: state, opponent, hero,
- * where to watch; one fact a line, on Signature's baseline grid (24 px between lines at least). Also the automatic fallback for any club another style can't draw (e.g. Signature without a
- * sharp crest), so everything here works for any club, with or without a crest.
+ * shirt's top fades into the ink like a collar in shadow, under a header across the whole card (LAYOUT-COMPETITION
+ * §5): the competition at the left safe edge, the state ending at the right one. Under it the lines of the shared
+ * grammar stand left-aligned from x = 300: opponent, hero, where to watch (or a result's date); one fact a line, on
+ * Signature's baseline grid (24 px between lines at least). Also the automatic fallback for any club another style
+ * can't draw (e.g. Signature without a sharp crest), so everything here works for any club, with or without a crest.
  *
  * Positions are the reference renders' (design/spec/cards/kit/*.png): text sits by its baseline, worked out from the
  * CSS boxes and checked against the measured glyph bands.
@@ -55,8 +57,10 @@ final class KitStyle implements CardStyle {
     public void draw(Context c, Canvas cv, CardModel m, ClubTokens t, CardArt art) {
         kit(cv, t);
         scrim(cv);
+        fade(cv);
         disc(cv, art.myCrest(), m.mineRaw, MY_DISC_CX, MY_DISC_CY, MY_DISC, MY_CREST, 14, 10, 0.45f);
-        stateLine(cv, m);
+        float stateW = stateLine(cv, m);
+        competition(cv, m, stateW);
         opponentLine(cv, m, art, SignatureStyle.oppCy(m.state));
         hero(cv, m);
         lineFour(cv, m, art);
@@ -139,6 +143,20 @@ final class KitStyle implements CardStyle {
         cv.drawRect(KIT_W, 0, Cards.W, Cards.H, p);
     }
 
+    /**
+     * The shirt's top fades into the ink (LAYOUT-COMPETITION §5): rgb(18, 17, 20) solid over y 0–100, to nothing at
+     * y 170, over the band only (the rest is ink already). The header's competition stands on 90 % ink or more for its
+     * whole height, on a white kit too; the disc (y 168–372) is untouched.
+     */
+    static final float FADE_A = 1f, FADE_FLAT = 100, FADE_H = 170;
+
+    static void fade(Canvas cv) {
+        int a = ((int) (FADE_A * 255 + 0.5f) << 24) | SCRIM;
+        Paint p = new Paint(Paint.DITHER_FLAG);
+        p.setShader(new LinearGradient(0, 0, 0, FADE_H, new int[]{a, a, SCRIM}, new float[]{0, FADE_FLAT / FADE_H, 1}, Shader.TileMode.CLAMP));
+        cv.drawRect(0, 0, KIT_W, FADE_H, p);
+    }
+
     /** A crest on an ivory disc (#EDEAE3) with a soft shadow; the club badge without a crest. */
     static void disc(Canvas cv, Bitmap crest, String raw, float cx, float cy, float size, float crestRatio,
                      float blur, float dy, float shadow) {
@@ -150,39 +168,34 @@ final class KitStyle implements CardStyle {
         CardKit.crest(cv, crest, cx, cy, size * crestRatio, null);
     }
 
-    // ================================================================ 2. line 1: the state
+    // ================================================================ 2. the header: the competition, the state
     /**
-     * The state line as Signature sets it: GS Bold 56, fit 602 (spec §3.3: 52). The launcher shows an unfocused card at
-     * 0.404 of the bitmap (388 px wide on a 1080p TV), so 56 reads as 23 px; Kit and Signature share it. Two segments
-     * keep 48 or lose the second (ΚΑΘΥΣΤΕΡΗΣΗ · ΣΗΜΕΡΑ: ΚΑΘΥΣΤΕΡΗΣΗ); min 40 for a main word alone.
+     * The state as Signature sets it: GS Bold 56, the main words only, fit 602 (spec §3.3: 52), min 44; its right edge
+     * at the stack's (x 902, LAYOUT-COMPETITION §5: Kit's 602 column can't hold a league and a date side by side, so
+     * the header takes the card's width and the state its far end). 56 reads as 23 px at the launcher's 0.404.
      */
-    static final float STATE_SIZE = 56, STATE_MIN = 40, LIVE_PILL_H = 66, LIVE_PILL_SIZE = 48;
+    static final float STATE_SIZE = 56, STATE_MIN = 44, LIVE_PILL_H = 66, LIVE_PILL_SIZE = 48;
 
-    /** TOMORROW / IN 2 H / SUN 22 NOV / FINAL · FRI 6 NOV / POSTPONED · SUN 22 NOV (40 %) / the LIVE pill. */
-    static void stateLine(Canvas cv, CardModel m) {
-        if (m.state == CardModel.State.LIVE) {  // only a match in play is drawn as live (not awaiting, not suspended)
+    /** TOMORROW / IN 2 H / SUN 22 NOV / FINAL / POSTPONED / the LIVE pill, ending at x 902; returns its width. */
+    static float stateLine(Canvas cv, CardModel m) {
+        if (m.state == CardModel.State.LIVE)  // only a match in play is drawn as live (not awaiting, not suspended)
             // as Signature: centred on y 77 (y 44-110), the opponent line 22 lower (SignatureStyle.oppCy)
-            CardKit.livePill(cv, m, STACK_X, SignatureStyle.LIVE_PILL_CY, LIVE_PILL_H, LIVE_PILL_SIZE, false);
-            return;
-        }
-        String main = m.stateLine;
-        String seg = m.stateExtra.isEmpty() ? m.dateLine : m.dateLine.isEmpty() ? m.stateExtra : m.stateExtra + " · " + m.dateLine;
-        Paint a = text(Ui.BOLD, STATE_SIZE, CardKit.WHITE, 0.04f);
-        Paint b = text(Ui.MEDIUM, STATE_SIZE, CardKit.alpha(CardKit.WHITE, m.dateDim ? 0.40f : 0.66f), 0.03f);
+            return CardKit.livePill(cv, m, STACK_R, SignatureStyle.LIVE_PILL_CY, LIVE_PILL_H, LIVE_PILL_SIZE, true);
+        final Paint a = text(Ui.BOLD, STATE_SIZE, CardKit.WHITE, 0.04f);
         a.setFontFeatureSettings(null);  // dates in proportional figures, as set in the reference (tabular: the hero)
-        b.setFontFeatureSettings(null);
-        String sub = seg.isEmpty() ? "" : "· " + seg;
-        final String fMain = main, fSub = sub;
-        // both segments while they keep 48 (SignatureStyle.STATE_KEEP); under that the main words alone, to 40
-        float size = SignatureStyle.stateSize(both -> a.measureText(fMain) + (both ? 16 + b.measureText(fSub) : 0),
-            sz -> { a.setTextSize(sz); b.setTextSize(sz); }, STATE_SIZE, SignatureStyle.STATE_KEEP, STATE_MIN, STACK_W, sub.isEmpty());
-        if (size < 0) { sub = ""; size = -size; }
-        a.setTextSize(size); b.setTextSize(size);
-        float base = STATE_CY + CardKit.cap(a) / 2;
-        float w = a.measureText(main);
-        if (w > STACK_W) { main = CardKit.cut(a, main, STACK_W); w = a.measureText(main); sub = ""; }
-        cv.drawText(main, STACK_X, base, a);
-        if (!sub.isEmpty()) cv.drawText(CardKit.cut(b, sub, STACK_W - w - 16), STACK_X + w + 16, base, b);
+        String main = m.stateLine;
+        float size = SignatureStyle.stateSize(sz -> { a.setTextSize(sz); return a.measureText(main); }, STATE_SIZE, STATE_MIN, STACK_W);
+        a.setTextSize(size);
+        String s = a.measureText(main) > STACK_W ? CardKit.cut(a, main, STACK_W) : main;
+        CardKit.right(cv, a, s, STACK_R, STATE_CY + CardKit.cap(a) / 2);
+        return a.measureText(s);
+    }
+
+    /** The competition at the left safe edge, as Signature's (it may run past the band onto the flat ink). */
+    static void competition(Canvas cv, CardModel m, float stateW) {
+        boolean live = m.state == CardModel.State.LIVE;
+        CardKit.headerComp(cv, m, SignatureStyle.COMP_X, live ? Float.NaN : SignatureStyle.COMP_BASE,
+            SignatureStyle.LIVE_PILL_CY, (STACK_R - SignatureStyle.COMP_X) - SignatureStyle.COMP_GAP - stateW);
     }
 
     // ================================================================ 3. line 2: VS / @, the opponent's disc, the name
@@ -260,13 +273,14 @@ final class KitStyle implements CardStyle {
      * Line 4 carries one fact: where to watch (RC Regular 56, 23 px at the launcher's 0.404), fit 602 by the shared
      * channel fit (CardKit.fitChannel: the logo capped at 240 → 200 → 180, the type down to 44, then without LIKELY
      * and with "/" between the names, then untracked; never under 44; a logo that wouldn't read set as the channel's
-     * name). When the data is stale the amber not-updated warning takes the line instead. No channel (results,
-     * postponed, awaiting, suspended): no line. The competition is not drawn (the launcher's description names it).
+     * name); the date of a result, a postponed or abandoned match (SignatureStyle.dateFoot, from x 300). When the data
+     * is stale the amber not-updated warning takes the line instead. Awaiting, suspended: no line.
      */
     static final float FOOT_SIZE = 56, LOGO_W = 240, LOGO_H = SignatureStyle.LOGO_H;
 
     static void lineFour(Canvas cv, CardModel m, CardArt art) {
         if (m.stale) { SignatureStyle.staleLine(cv, STACK_X, FOOT_CY, FOOT_SIZE, false); return; }
+        if (!SignatureStyle.footDate(m).isEmpty()) { SignatureStyle.dateFoot(cv, m, STACK_X, FOOT_CY, false, STACK_W); return; }
         if (m.channel == null) return;
         int chText = CardKit.alpha(CardKit.WHITE, 0.72f);
         CardKit.ChannelSet s = CardKit.fitChannel(m, art, FOOT_SIZE, STACK_W, LOGO_H);
