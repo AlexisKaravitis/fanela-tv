@@ -35,6 +35,7 @@ public class NamesTest {
     @Test public void sportsDbBasketNames() {
         I18n.use("en");
         assertEquals("Karditsa", I18n.shortTeam("ASK Karditsas BC"));
+        assertEquals("Karditsa", I18n.team("ASK Karditsas"));  // titles too, not only cards
         assertEquals("Vikos Falcons", I18n.shortTeam("Vikos Falcons BC"));
         I18n.use("el");
         assertEquals("Καρδίτσα", I18n.shortTeam("ASK Karditsas BC"));

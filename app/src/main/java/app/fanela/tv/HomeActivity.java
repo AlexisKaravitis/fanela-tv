@@ -3,75 +3,69 @@ package app.fanela.tv;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Color;
-import android.graphics.Outline;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.TextUtils;
-import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
-import android.widget.HorizontalScrollView;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
-import android.widget.TextView;
-import java.io.File;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The app's main screen: one row of match cards per followed club (live or next match, the following fixtures, the
- * latest results), with the channel for each match. Works on every TV, including Google TV, which does not show
- * home-screen rows. While it is on screen it refreshes live scores every 30 s during matches; nothing polls once it
- * is closed.
+ * The app's main screen. HomeActivity keeps the data (followed clubs, their matches, the status), the refresh cycle,
+ * the match screen and focus restoration; how the screen looks is the app layout chosen in Settings › Appearance
+ * (HomeLayout: Club by default). Works on every TV, including Google TV, which does not show home-screen rows. While
+ * it is on screen it refreshes live scores every 30 s during matches; nothing polls once it is closed.
  *
- * Threads: "net" runs refreshes and live ticks (slow, network); "display" draws and decodes the cards; "detail" draws
- * the large card of the match panel. The screen is rebuilt only when its structure changes (clubs or card slots);
- * a new score or clock just swaps the picture of that card, so focus and scrolling never jump.
+ * Threads: "net" runs refreshes and live ticks (slow, network); "display" builds the HomeModel and lets the layout
+ * prepare its images; "detail" prepares the match screen's images. A new score or clock only rebinds the layout,
+ * which updates in place, so focus and scrolling never jump; an open match screen is prepared again and updated in
+ * place too (its score, its clock, its button once the channel's app is installed). The saved data is read again at
+ * every minute, so the clock and "in 2 h 15 min" never lag (no network for that).
+ *
+ * Start (SPEC-APP 3.4): the window opens on the brand (near-black with the Fanela shirt, styles.xml; on Android 12+
+ * the system's splash shows the same shirt, LaunchActivity), and the app's own first frame is that brand again (the
+ * root wears launch.xml, the layout is laid out but not drawn yet), so the shirt stays on screen however long the
+ * first real frame takes. The next frame already wears the favourite club: the layout is bound at once to a loading
+ * model made from the preferences alone (the followed clubs and their kit colours; first()), so the field, the rail
+ * with its crests from the TV's cache and the skeletons in their final slots are drawn before anything is loaded. The
+ * saved data and the crest watermark are prepared alongside, at a low priority; the network waits until that frame
+ * is on screen (afterFirstDraw).
+ *
+ * Back (BackKey, the same on Android 8-14): closes the match screen, then lets the layout go back (Matchday's moved
+ * list returns to row 1), else the app closes.
  */
-public class HomeActivity extends Activity {
+public class HomeActivity extends Activity implements HomeLayout.Host {
     private static final long LIVE_EVERY = 30000L, IDLE_EVERY = 5 * 60000L, BUSY_RETRY = 3000L;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private ExecutorService net, display, detail;
-    private LinearLayout sections;
-    private TextView status;
-    /** The details of the focused card: one place under the header, like the TV's own home screen. */
-    private TextView detailHead, detailDesc;
-    private View settingsButton;
     private FrameLayout root, overlay;
-    private String pendingMatch;  // a match to open once the cards are loaded (from a home-screen tile)
-    private String builtLang;
-    private String builtTheme;
+    private volatile HomeLayout layout;
+    private HomeModel shown;
+    private String pendingMatch;  // a match to open once it is on screen (from a home-screen tile)
+    private String builtLang, builtTheme, builtLayout;
+    /** The focus to restore: across a rebuild (language, layout) and after the match screen. */
+    private String restoreKey, panelReturn;
+    /** The club shown when the system ended the app (onSaveInstanceState), for the first build. */
+    private String restoreSelected;
     private int generation;
     private boolean resumed;
     private volatile boolean refreshing, tried;  // tried: a refresh of ours finished since the screen opened
-    private volatile String shownStructure = "";  // what the rows show now (UI thread writes, display thread reads)
-    private final Map<String, Card> cards = new java.util.LinkedHashMap<>();  // UI thread only, in screen order
-    private final Map<String, String> shownUri = new java.util.concurrent.ConcurrentHashMap<>();
-    private final Map<String, Bitmap> logos = new HashMap<>();  // display thread only: club badge per logo tag
-    private Object backCallback;
+    private BackKey back;
+    /** The match screen's match and club, to prepare it again when the data changes (null while it is closed). */
+    private Match detailMatch;
+    private Teams.Club detailClub;
     private volatile long lastTick;     // net thread (onResume resets it): when the live scores were last polled
     private volatile boolean lastLive;  // what that poll found
-    private final List<android.animation.Animator> pulses = new ArrayList<>();  // UI thread: the loading placeholders
+    /** The current content has been drawn once: the network may start (afterFirstDraw). */
+    private boolean drawn;
 
-    /** A card on screen. Its match can change in place (score, clock) without rebuilding the row. */
-    static final class Card {
-        FrameLayout view; ImageView img; Bitmap bmp; Cards.Ref ref; Teams.Club club; TextView headline, desc;
-    }
-
-    static final class Section { Teams.Club club; List<Cards.Ref> refs; boolean everLoaded; Bitmap logo; String tag; }
+    /** How long until the clock's next minute (a little after it, so the minute has turned when the screen reads it). */
+    static long untilNextMinute(long now) { return 60000L - now % 60000L + 200L; }
 
     /** Live scores are polled at most every 30 s, however often the cycle runs (a 3 s retry while another refresh is busy). */
     static boolean tickDue(long now, long lastTick) { return now - lastTick >= LIVE_EVERY - 1000L; }
@@ -88,6 +82,12 @@ public class HomeActivity extends Activity {
             if (!resumed) return;
             final int gen = generation;
             final Context app = getApplicationContext();
+            if (Scenario.active(app) != null) {  // a debug scenario: its own data, no network (read again like a live poll)
+                loadLater();
+                ui.removeCallbacks(cycle);
+                ui.postDelayed(cycle, LIVE_EVERY);
+                return;
+            }
             net.execute(new Runnable() { public void run() {
                 Engine.background();
                 boolean live = false, busy = false;
@@ -121,18 +121,48 @@ public class HomeActivity extends Activity {
         }
     };
 
+    /** Every minute while the screen is on: the saved data again, so the clock and the relative times are current. */
+    private final Runnable minute = new Runnable() {
+        public void run() {
+            if (!resumed) return;
+            loadLater();
+            ui.removeCallbacks(minute);
+            ui.postDelayed(minute, untilNextMinute(System.currentTimeMillis()));
+        }
+    };
+
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        back = BackKey.attach(this, new BackKey.Handler() { public boolean back() { return onBack(); } });
         I18n.load(this);
+        Scenario.apply(this);
         Ui.theme(this);
+        Ui.fonts(this);
+        Net.init(this);
         net = Executors.newSingleThreadExecutor();
         display = Executors.newSingleThreadExecutor();
         detail = Executors.newSingleThreadExecutor();
-        pendingMatch = getIntent().getStringExtra("match");
-        build();
-        if (!Teams.chosen(this) && Teams.followed(this).isEmpty()) {
+        // re-created by the system (the app was ended in the background): the screen as it was left, not the tile's
+        // match again (the intent still carries it, though it was opened, and maybe closed, long ago)
+        pendingMatch = b != null ? b.getString("match") : getIntent().getStringExtra("match");
+        restoreKey = b != null ? b.getString("focus") : null;
+        restoreSelected = b != null ? b.getString("selected") : null;
+        build(true);
+        if (!Teams.chosen(this) && Teams.followed(this).isEmpty() && Scenario.active(this) == null) {
             startActivity(new Intent(this, SettingsActivity.class).putExtra("setup", true));
         }
+    }
+
+    /**
+     * What the system keeps if it ends the app in the background: the open match screen's match, the focused item (the
+     * one the match screen returns to) and the club shown. onCreate gives them to the usual paths: the match opens
+     * once it is on screen (openPending), the focus goes back after the first load (restoreKey).
+     */
+    @Override protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out);
+        out.putString("match", overlay != null && detailMatch != null ? detailMatch.key : pendingMatch);
+        out.putString("focus", layout == null ? null : overlay != null ? panelReturn : layout.focusKey());
+        out.putString("selected", layout == null ? null : layout.selected());
     }
 
     @Override protected void onNewIntent(Intent i) {
@@ -153,148 +183,183 @@ public class HomeActivity extends Activity {
         resumed = true;
         generation++;
         lastTick = 0;  // scores at once
-        for (android.animation.Animator a : pulses) a.resume();
         Net.reset();  // the user is here now: retry every source at once
         I18n.load(this);
+        Scenario.apply(this);
         Ui.theme(this);
-        if (!I18n.lang().equals(builtLang) || !Ui.key().equals(builtTheme)) build();  // language or favourite club changed in Settings
-        else updateHeader();
-        loadLater();  // saved data at once
-        ui.removeCallbacks(cycle);
-        ui.postDelayed(cycle, 300);  // then a refresh in the background
+        if (!I18n.lang().equals(builtLang) || !Ui.key().equals(builtTheme) || !Appearance.layout(this).equals(builtLayout)) {
+            restoreKey = layout == null ? null : layout.focusKey();
+            build(false);  // language, favourite club or app layout changed in Settings
+        }
+        if (layout != null) layout.resume();
+        loadLater();  // saved data at once, in the background (an open match screen too: its app may be installed now)
+        if (drawn) startCycle();  // the network: once the first frame is on screen (afterFirstDraw)
+        ui.removeCallbacks(minute);
+        ui.postDelayed(minute, untilNextMinute(System.currentTimeMillis()));
     }
 
     @Override protected void onPause() {
         resumed = false;
         generation++;
         ui.removeCallbacks(cycle);
-        for (android.animation.Animator a : pulses) a.pause();
+        ui.removeCallbacks(minute);
+        if (layout != null) layout.pause();
         super.onPause();
     }
 
     @Override protected void onDestroy() {
         ui.removeCallbacksAndMessages(null);
-        stopPulses();
         net.shutdownNow();
         display.shutdownNow();
         detail.shutdownNow();
-        for (Card c : cards.values()) if (c.bmp != null) { c.img.setImageDrawable(null); c.bmp.recycle(); }
-        cards.clear();
+        if (layout != null) layout.release();
+        back.detach();
         super.onDestroy();
     }
 
+    @Override public boolean dispatchKeyEvent(KeyEvent e) {
+        if (overlay == null && layout != null && layout.onKey(e)) return true;
+        return super.dispatchKeyEvent(e);
+    }
+
     @Override public boolean onKeyDown(int code, KeyEvent e) {
-        if (code == KeyEvent.KEYCODE_BACK && overlay != null) { closeDetail(); return true; }  // Android 8-12
+        if (back.onKeyDown(code, e)) return true;  // Android 8-12; 13+ calls BackKey's callback
         if (code == KeyEvent.KEYCODE_MENU) { openSettings(); return true; }
         return super.onKeyDown(code, e);
+    }
+
+    @Override public boolean onKeyUp(int code, KeyEvent e) {
+        if (back.onKeyUp(code, e)) return true;
+        return super.onKeyUp(code, e);
+    }
+
+    /** Back: the match screen closes, else the layout goes back (Matchday's moved list), else the app closes. */
+    private boolean onBack() {
+        if (overlay != null) { closeDetail(); return true; }
+        return layout != null && layout.back();
     }
 
     private boolean gone() { return isFinishing() || isDestroyed(); }
 
     private int dp(float v) { return Ui.dp(this, v); }
 
+    /** The refresh cycle (network), a moment after the screen is up. */
+    private void startCycle() {
+        ui.removeCallbacks(cycle);
+        ui.postDelayed(cycle, 300);
+    }
+
+    /**
+     * Once the new content's first frame is drawn (it already shows the field, the rail and the skeletons), the refresh
+     * cycle starts: no download competes with that frame. The saved data is read meanwhile on the display thread (at
+     * a low priority), so the screen fills in as soon as it can; were it ready first, the first frame shows it.
+     * brand: the layout, kept out of the first frame (the brand is drawn alone, QA3A-1); shown once that frame is up.
+     */
+    private void afterFirstDraw(final View content, final View brand) {
+        drawn = false;
+        final android.view.ViewTreeObserver.OnDrawListener[] self = new android.view.ViewTreeObserver.OnDrawListener[1];
+        self[0] = new android.view.ViewTreeObserver.OnDrawListener() {
+            boolean done;
+            public void onDraw() {
+                if (done) return;
+                done = true;
+                ui.post(new Runnable() { public void run() {  // a listener may not be removed while it is called
+                    content.getViewTreeObserver().removeOnDrawListener(self[0]);
+                    if (content != root || gone()) return;  // rebuilt meanwhile: the new content has its own
+                    if (brand != null) {  // the shirt is on screen: now the club (the shirt stays until it is drawn)
+                        if (BuildConfig.DEBUG) android.util.Log.i("Fanela", "brand frame drawn");
+                        brand.setVisibility(View.VISIBLE);
+                        root.setBackgroundColor(Ui.APP_BG);
+                        if (overlay == null && layout != null && root.findFocus() == null) { layout.focus(restoreKey); if (shown != null) restoreKey = null; }
+                        afterFirstDraw(content, null);
+                        return;
+                    }
+                    drawn = true;
+                    if (BuildConfig.DEBUG) android.util.Log.i("Fanela", "first frame drawn");
+                    if (resumed) startCycle();
+                }});
+            }
+        };
+        content.getViewTreeObserver().addOnDrawListener(self[0]);
+    }
+
+    /**
+     * The first frame, from the preferences alone: every followed club as loading, with its kit colours, so the
+     * layout draws its field, its rail and the skeletons in their final slots before anything is read or fetched.
+     */
+    private void first(HomeLayout l) {
+        try {
+            long t0 = System.nanoTime();
+            HomeModel h = new HomeModel();
+            Scenario.Snapshot sc = Scenario.active(this);
+            h.now = sc != null ? sc.now : System.currentTimeMillis();
+            h.favourite = sc != null ? sc.favourite : Teams.favourite(this);
+            boolean basket = Teams.basketball(this);
+            for (String id : sc != null ? sc.follow : Teams.followed(this)) {
+                Teams.Club k = Teams.get(this, id);  // saved with the follow list: no league file is read here
+                if (k == null) continue;
+                HomeModel.ClubData d = new HomeModel.ClubData();
+                d.club = k;
+                d.colors = ClubLayout.colors(k);
+                d.kind = HomeModel.Kind.LOADING;
+                h.teams.put(id, k.teams(basket));
+                h.clubs.add(d);
+            }
+            h.status = HomeModel.Status.UPDATING;
+            h.statusText = AppText.t("updating");
+            l.first(this, h);
+            l.bind(h);
+            if (BuildConfig.DEBUG) android.util.Log.i("Fanela", "first frame bound " + (System.nanoTime() - t0) / 1000000 + " ms");
+        } catch (Throwable t) {  // the first load draws everything anyway
+            android.util.Log.w("Fanela", "first frame", t);
+        }
+    }
+
     // ---------- layout ----------
-    private void build() {
-        stopPulses();
-        for (Card c : cards.values()) if (c.bmp != null) { c.img.setImageDrawable(null); c.bmp.recycle(); }
-        cards.clear();
-        shownUri.clear();
-        shownStructure = "";
+    /**
+     * The screen in the chosen layout. brand (the activity's first build): the root wears the window's brand
+     * (launch.xml, the shirt on near-black) and the layout stays undrawn for one frame, so the app's first frame is the
+     * brand the window and the splash showed, never a plain colour while the first real frame is drawn (QA3A-1).
+     */
+    private void build(boolean brand) {
+        String sel = layout == null ? restoreSelected : layout.selected();
+        restoreSelected = null;
+        if (layout != null) layout.release();
+        HomeLayout l = HomeLayout.create(Appearance.layout(this));
+        if (sel != null) l.select(sel);
         root = new FrameLayout(this);
-        root.setBackgroundColor(Ui.BG);
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setClipChildren(false);
-        scroll.setVerticalFadingEdgeEnabled(true);
-        scroll.setFadingEdgeLength(dp(24));  // a short fade where rows slide under the pinned header
-        scroll.setSmoothScrollingEnabled(true);
-        LinearLayout page = new LinearLayout(this);
-        page.setOrientation(LinearLayout.VERTICAL);
-        page.setClipChildren(false);
-        page.setClipToPadding(false);
-        page.setPadding(dp(Ui.SIDE), 0, dp(Ui.SIDE), dp(Ui.TOP));
-        scroll.addView(page, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        // the header and the details of the focused card stay put; the club rows scroll under them
-        LinearLayout column = new LinearLayout(this);
-        column.setOrientation(LinearLayout.VERTICAL);
-        // clipped: the rows scrolling up must slide under the header, not be drawn over it (the header and the
-        // focused cards have room to grow inside their own padding)
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.VERTICAL);
-        top.setClipChildren(false);  // the focused Settings button grows: never cut it
-        top.setClipToPadding(false);
-        top.setPadding(dp(Ui.SIDE), dp(Ui.TOP), dp(Ui.SIDE), 0);
-        column.addView(top);
-        column.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        root.addView(column, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-
-        LinearLayout head = new LinearLayout(this);
-        head.setOrientation(LinearLayout.HORIZONTAL);
-        head.setGravity(Gravity.CENTER_VERTICAL);
-        head.setClipChildren(false);
-        ImageView logo = new ImageView(this);
-        logo.setImageBitmap(Logo.wordmark(this));  // the shirt in the favourite club's colours
-        logo.setAdjustViewBounds(true);
-        logo.setContentDescription(getString(R.string.app_name));
-        head.addView(logo, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(30)));
-        status = Ui.text(this, "", 16, Ui.SUB, false);
-        status.setSingleLine(true);
-        status.setEllipsize(TextUtils.TruncateAt.END);
-        status.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
-        sp.setMargins(dp(24), 0, dp(16), 0);
-        head.addView(status, sp);
-        TextView set = Ui.button(this, I18n.t("settings"));
-        set.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { openSettings(); } });
-        settingsButton = set;
-        head.addView(set);
-        top.addView(head);
-        detailHead = Ui.text(this, "", 22, Ui.TEXT, true);
-        detailHead.setSingleLine(true);
-        detailHead.setEllipsize(TextUtils.TruncateAt.END);
-        detailDesc = Ui.text(this, "", 16, Ui.SUB, false);
-        detailDesc.setSingleLine(true);
-        detailDesc.setEllipsize(TextUtils.TruncateAt.END);
-        detailDesc.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        LinearLayout details = new LinearLayout(this);
-        details.setOrientation(LinearLayout.VERTICAL);
-        details.addView(detailHead);
-        details.addView(detailDesc);
-        details.setMinimumHeight(dp(48));
-        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        dlp.setMargins(0, dp(14), 0, 0);
-        top.addView(details, dlp);
-
-        sections = new LinearLayout(this);
-        sections.setOrientation(LinearLayout.VERTICAL);
-        sections.setClipChildren(false);
-        sections.setClipToPadding(false);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(0, dp(8), 0, 0);
-        page.addView(sections, lp);
+        View content = l.build(this, this);
+        if (brand) {
+            root.setBackground(getDrawable(R.drawable.launch));
+            content.setVisibility(View.INVISIBLE);
+        } else root.setBackgroundColor(Ui.APP_BG);
+        root.addView(content, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        first(l);
+        afterFirstDraw(root, brand ? content : null);
         setContentView(root);
-        overlay = null;
+        layout = l;
+        overlay = null;  // the match screen went with the old content
+        detailMatch = null;
+        detailClub = null;
+        shown = null;
         builtLang = I18n.lang();
         builtTheme = Ui.key();
-        updateHeader();
+        builtLayout = Appearance.layout(this);
     }
 
-    /** How soon a match starts: "in 40 minutes", "in 3 hours", "in 2 days"; empty when it is past or a day off (the date says it). */
-    static String until(long start) {
-        long ms = start - System.currentTimeMillis();
-        if (ms <= 0) return "";
-        long min = ms / 60000;
-        if (min < 2) return I18n.t("in_minute");
-        if (min < 90) return I18n.f("in_minutes", (int) min);
-        if (min < 12 * 60) return I18n.f("in_hours", Math.round(min / 60f));  // 90 minutes and up: 2 hours or more
-        java.util.Calendar a = java.util.Calendar.getInstance(), b = java.util.Calendar.getInstance();
-        b.setTimeInMillis(start);
-        int days = (int) Math.round((I18n.startOfDay(b) - I18n.startOfDay(a)) / 86400000.0);
-        return days >= 2 ? I18n.f("in_days", days) : "";  // today and tomorrow are already in the date
+    @Override public void openSettings() { startActivity(new Intent(this, SettingsActivity.class)); }
+
+    @Override public void chooseClubs() { startActivity(new Intent(this, SettingsActivity.class).putExtra("setup", true)); }
+
+    @Override public void openMatch(Match m, Teams.Club club) {
+        if (m == null || club == null) return;
+        showMatch(m, club);
     }
 
-    private void openSettings() { startActivity(new Intent(this, SettingsActivity.class)); }
+    @Override public void openLive(Match m, Teams.Club club) {
+        if (m.channelKnown && m.channelApp != null && HomeRows.installed(this, m.channelApp) && OpenActivity.launch(this, m.channelApp)) return;
+        openMatch(m, club);
+    }
 
     /** The app's page on Google Play (the TV's store), or its web page when there's no store app. */
     private void openStore(String pkg) {
@@ -309,588 +374,203 @@ public class HomeActivity extends Activity {
         }
     }
 
-    private void updateHeader() {
-        if (status == null) return;
-        long last = Store.lastUpdateAll(this);  // the same value as the Settings status
-        boolean stale = false;
-        for (String id : Teams.followed(this)) {
-            Teams.Club k = Teams.get(this, id);
-            stale |= Store.stale(this, id, k == null ? "FC" : k.mainTeam());
-        }
-        String s;
-        if (Teams.followed(this).isEmpty()) s = "";
-        else if (last == 0 && !tried) s = I18n.t("updating");
-        else if (last == 0) s = I18n.t("no_connection");
-        else if (stale) s = I18n.t("offline");
-        else s = I18n.f("updated", I18n.day(last).toLowerCase(I18n.locale()) + " " + I18n.time(last));
-        if (AppUpdate.available(this) != null) s = (s.isEmpty() ? "" : s + " · ") + I18n.t("update_available");
-        if (!s.contentEquals(status.getText())) status.setText(s);
-    }
-
     // ---------- data ----------
     private void loadLater() {
         try { display.execute(new Runnable() { public void run() { Engine.background(); load(); } }); }
         catch (Exception ignored) { }  // shutting down
     }
 
-    /**
-     * Draws what changed for every followed club and shows it. Display thread. The first time (nothing on screen yet)
-     * the cards already on the TV are shown at once, before any is drawn; the ones that changed follow through update().
-     */
+    /** Builds the model from the saved matches, lets the layout prepare its images, then shows it. Display thread. */
     private void load() {
         try {
             final Context app = getApplicationContext();
+            final HomeLayout l = layout;
+            if (l == null) return;
             I18n.load(app);
+            Scenario.apply(app);
             Where.load(app);
-            List<Match> all = Store.load(app);
-            Engine.timeStates(all, System.currentTimeMillis());
-            boolean waiting = !tried || refreshing;
-            String base = shownStructure;
-            Map<String, String> baseUri = shownUri;
-            if (base.isEmpty()) {  // the first frame: what is on disk now (after a redesign, every card is redrawn: 10-25 s)
-                List<Section> quick = sections(app, all, false);
-                String qs = structure(quick, waiting);
-                Map<String, String> quickUri = new HashMap<>();
-                for (Section s : quick) for (Cards.Ref r : s.refs) quickUri.put(r.name, r.uri);
-                present(quick, qs, true, decode(app, quick, new HashMap<String, String>()));
-                base = qs;
-                baseUri = quickUri;
-            }
-            List<Section> out = sections(app, all, true);
-            String newStructure = structure(out, waiting);
-            boolean rebuild = !newStructure.equals(base);
-            // decode only the cards whose picture is new; on a rebuild, the others move across from the cards shown (show)
-            present(out, newStructure, rebuild, decode(app, out, baseUri));
-        } catch (Throwable ignored) { }  // out of memory, say: blank cards until the next load, never a closed app
+            Scenario.Snapshot sc = Scenario.active(app);
+            if (sc != null && sc.lang != null) I18n.use(sc.lang);
+            long now = sc != null ? sc.now : System.currentTimeMillis();
+            List<Match> all = sc != null ? sc.matches : Store.load(app);
+            if (sc == null) Engine.timeStates(all, now);
+            long t0 = System.nanoTime();
+            final HomeModel m = model(app, all, now, sc);
+            l.prepare(app, m);
+            if (BuildConfig.DEBUG) android.util.Log.i("Fanela", "home model + prepare " + (System.nanoTime() - t0) / 1000000 + " ms");
+            ui.post(new Runnable() { public void run() {
+                if (gone()) return;
+                if (l != layout) { loadLater(); return; }  // rebuilt meanwhile: the new layout prepares its own
+                boolean first = shown == null;
+                shown = m;
+                l.bind(m);
+                if (first && restoreKey != null && overlay == null && root.findFocus() != null) { l.focus(restoreKey); restoreKey = null; }
+                if (overlay != null) refreshMatch(m);
+                openPending();
+            }});
+        } catch (Throwable t) {  // out of memory, say: the screen keeps what it shows until the next load
+            android.util.Log.w("Fanela", "home load", t);
+        }
     }
 
-    /** Every followed club's row: its cards (drawn where they changed, or only those on disk) and its logo. */
-    private List<Section> sections(Context app, List<Match> all, boolean draw) {
-        List<Section> out = new ArrayList<>();
-        for (String id : Teams.followed(app)) {
+    /** Every followed club's hero, latest results, fixtures and rail line, and the status slot. */
+    private HomeModel model(Context app, List<Match> all, long now, Scenario.Snapshot sc) {
+        HomeModel h = new HomeModel();
+        h.now = now;
+        h.all = all;
+        boolean basket = Teams.basketball(app), waiting = !tried || refreshing;
+        Iterable<String> ids = sc != null ? sc.follow : Teams.followed(app);
+        h.favourite = sc != null ? sc.favourite : Teams.favourite(app);
+        boolean loading = false, stale = false;
+        for (String id : ids) {
             Teams.Club k = Teams.get(app, id);
+            if (k == null) k = Teams.find(app, id);
             if (k == null) continue;
-            Section s = new Section();
-            s.club = k;
-            s.refs = Cards.forApp(app, k, all, draw);
-            s.everLoaded = Store.lastUpdate(app, id, k.mainTeam()) > 0;
-            s.tag = Cards.rowLogoLazy(app, k).tag();
-            s.logo = logos.get(id + s.tag);
-            if (s.logo == null) { s.logo = Cards.rowLogo(app, k); logos.put(id + s.tag, s.logo); }
-            out.add(s);
-        }
-        return out;
-    }
-
-    /** What the rows show, card by card: a change means a rebuild; the same structure only swaps pictures. */
-    private static String structure(List<Section> out, boolean waiting) {
-        StringBuilder structure = new StringBuilder(I18n.lang()).append(Ui.ACCENT);
-        for (Section s : out) {
-            structure.append('|').append(s.club.id).append(s.tag);
-            if (s.refs.isEmpty()) structure.append(':').append(s.everLoaded ? "none" : waiting ? "wait" : "fail");
-            for (Cards.Ref r : s.refs) structure.append(',').append(r.name);
-        }
-        return structure.toString();
-    }
-
-    /** The pictures of the cards not already shown with the same picture (shown: card name -> its picture's URI). */
-    private static Map<String, Bitmap> decode(Context app, List<Section> out, Map<String, String> shown) {
-        Map<String, Bitmap> decoded = new HashMap<>();
-        BitmapFactory.Options o = new BitmapFactory.Options();
-        o.inPreferredConfig = Bitmap.Config.RGB_565;  // the cards are opaque (saved without alpha): half the memory
-        for (Section s : out) for (Cards.Ref r : s.refs) {
-            if (r.uri.isEmpty() || r.uri.equals(shown.get(r.name))) continue;
-            Bitmap b = null;
-            try { b = BitmapFactory.decodeFile(new File(app.getFilesDir(), r.name + ".png").getPath(), o); }
-            catch (Throwable ignored) { }  // out of memory: this card stays blank
-            decoded.put(r.name, b);
-        }
-        return decoded;
-    }
-
-    /** Shows the rows on the UI thread: a rebuild when the structure changed, else the new pictures and texts. */
-    private void present(final List<Section> out, final String newStructure, final boolean rebuild, final Map<String, Bitmap> decoded) {
-        ui.post(new Runnable() { public void run() {
-            if (gone()) { recycleAll(decoded); return; }
-            updateHeader();
-            if (rebuild || !newStructure.equals(shownStructure)) {
-                if (!rebuild) { recycleAll(decoded); loadLater(); return; }  // the screen changed meanwhile: start over
-                show(out, decoded);
-                shownStructure = newStructure;
-            } else {
-                update(out, decoded);
+            HomeModel.ClubData d = new HomeModel.ClubData();
+            d.club = k;
+            d.colors = ClubLayout.colors(k);
+            String[] teams = k.teams(basket);
+            h.teams.put(id, teams);
+            d.bothSports = teams.length > 1;
+            d.hero = HomeModel.hero(all, id, teams, now);
+            d.kind = HomeModel.kind(d.hero);
+            d.latest.addAll(HomeModel.latest(all, id, teams, d.hero));
+            d.fixtures.addAll(HomeModel.fixtures(all, id, teams, d.hero, now));
+            HomeModel.rail(d, all, teams, now);
+            boolean ever = sc != null || Store.lastUpdate(app, id, k.mainTeam()) > 0;
+            if (sc != null && "loading".equals(sc.mode) && id.equals(sc.favourite)) ever = false;
+            boolean failedDemo = sc != null && "failed".equals(sc.mode) && d.hero == null && d.fixtures.isEmpty();  // debug scenario
+            if (failedDemo) ever = false;
+            if (!ever && (d.hero == null || sc != null)) {
+                d.kind = failedDemo ? HomeModel.Kind.FAILED : waiting || sc != null ? HomeModel.Kind.LOADING : HomeModel.Kind.FAILED;
+                d.hero = null;
+                d.latest.clear();
+                d.fixtures.clear();
             }
-            openPending();
-        }});
-    }
-
-    private static void recycleAll(Map<String, Bitmap> m) { for (Bitmap b : m.values()) if (b != null) b.recycle(); }
-
-    /** Same cards as before: swap the pictures that changed and refresh the texts. No focus or scroll change. */
-    private void update(List<Section> list, Map<String, Bitmap> decoded) {
-        boolean focusedCard = false;
-        for (Section s : list) for (Cards.Ref r : s.refs) {
-            Card c = cards.get(r.name);
-            Bitmap b = decoded.remove(r.name);
-            if (c == null) { if (b != null) b.recycle(); continue; }
-            c.ref = r;
-            c.club = s.club;
-            if (b != null) {
-                Bitmap old = c.bmp;
-                c.img.setImageBitmap(b);
-                c.bmp = b;
-                if (old != null) old.recycle();
-            }
-            shownUri.put(r.name, r.uri);
-            c.view.setContentDescription(Cards.headline(r) + ". " + Cards.describe(this, s.club, r));
-            if (c.view.isFocused()) { describe(c); focusedCard = true; }
+            d.stale = sc == null && Store.stale(app, id, k.mainTeam());
+            loading |= d.kind == HomeModel.Kind.LOADING;
+            stale |= d.stale;
+            h.clubs.add(d);
         }
-        // no card has focus (Settings has): the details keep describing the first card, with its latest score
-        if (!focusedCard && !list.isEmpty() && !list.get(0).refs.isEmpty()) describe(cards.get(list.get(0).refs.get(0).name));
-        recycleAll(decoded);
-    }
-
-    private void describe(Card c) {
-        if (c == null) return;
-        fadeText(c.headline, Cards.headline(c.ref));
-        fadeText(c.desc, Cards.describe(this, c.club, c.ref));
-    }
-
-    /** A 120 ms crossfade to new text (out, then in); the same text again changes nothing. */
-    private static void fadeText(final TextView t, final CharSequence s) {
-        CharSequence target = t.getTag() instanceof CharSequence ? (CharSequence) t.getTag() : t.getText();  // where it is going
-        if (TextUtils.equals(target, s)) return;
-        t.setTag(s);
-        t.animate().cancel();
-        t.animate().alpha(0f).setDuration(60).withEndAction(new Runnable() { public void run() {
-            t.setText(s);
-            t.animate().alpha(1f).setDuration(60).start();
-        }}).start();
-    }
-
-    private void stopPulses() {
-        for (android.animation.Animator a : pulses) a.cancel();
-        pulses.clear();
-    }
-
-    // ---------- rows of cards ----------
-    private void show(List<Section> list, Map<String, Bitmap> decoded) {
-        // where the user was: the card, its match, its club's row and position, and every row's scroll
-        View f = getCurrentFocus();
-        Card was = f != null && f.getTag() instanceof String ? cards.get(f.getTag()) : null;
-        String wasClub = was == null ? null : was.club.id, wasMatch = was == null ? null : was.ref.m.key;
-        int wasIndex = was == null ? 0 : ((ViewGroup) was.view.getParent()).indexOfChild(was.view);
-        boolean hadCards = !cards.isEmpty();
-        Map<String, Integer> scrollX = new HashMap<>();
-        for (int i = 0; i < sections.getChildCount(); i++)
-            if (sections.getChildAt(i) instanceof HorizontalScrollView && sections.getChildAt(i).getTag() != null)
-                scrollX.put((String) sections.getChildAt(i).getTag(), sections.getChildAt(i).getScrollX());
-
-        sections.removeAllViews();
-        stopPulses();
-        Map<String, Card> old = new HashMap<>(cards);  // their pictures move across to the new cards (not decoded again)
-        Map<String, String> oldUri = new HashMap<>(shownUri);
-        cards.clear();
-        shownUri.clear();
-        boolean behind = false;  // a card shows an older picture than its own (or none): load again
-        View first = null, byTag = null, byMatch = null, byClub = null;
-        if (list.isEmpty()) sections.addView(emptyState());
-        for (final Section s : list) {
-            LinearLayout title = new LinearLayout(this);
-            title.setOrientation(LinearLayout.HORIZONTAL);
-            title.setGravity(Gravity.CENTER_VERTICAL);
-            ImageView badge = new ImageView(this);
-            badge.setImageBitmap(s.logo);
-            badge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);  // decorative: the name follows
-            title.addView(badge, new LinearLayout.LayoutParams(dp(28), dp(28)));
-            TextView name = Ui.text(this, s.club.heading(), 22, Ui.TEXT, true);
-            name.setPadding(dp(12), 0, 0, 0);
-            title.addView(name);
-            LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            tp.setMargins(0, dp(12), 0, dp(6));
-            sections.addView(title, tp);
-
-            if (s.refs.isEmpty()) {
-                boolean waiting = !tried || refreshing;
-                if (!s.everLoaded) { sections.addView(skeleton(I18n.t(waiting ? "loading_club" : "load_failed"), waiting)); continue; }
-                TextView none = Ui.text(this, I18n.t("no_fixtures"), 16, Ui.SUB, false);
-                none.setPadding(0, dp(4), 0, dp(8));
-                sections.addView(none);
-                continue;
-            }
-            final TextView headline = detailHead, desc = detailDesc;
-            final HorizontalScrollView hs = new HorizontalScrollView(this);
-            hs.setTag(s.club.id);
-            hs.setHorizontalScrollBarEnabled(false);  // the row clips its own cards, so the fading edge has no seam
-            hs.setHorizontalFadingEdgeEnabled(false);  // like the TV's own home screen: rows run off the right edge
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setClipChildren(false);
-            row.setClipToPadding(false);
-            // room for the focused card to grow (1.08x: 10 dp across, 5 dp up and down) inside the 48 dp margin, with its
-            // ring and lift; the last card stops inside the safe area
-            row.setPadding(dp(24), dp(9), dp(Ui.SIDE), dp(9));
-            hs.addView(row);
-            List<View> rowCards = new ArrayList<>();
-            for (final Cards.Ref r : s.refs) {
-                Bitmap b = decoded.remove(r.name);
-                String uri = r.uri;  // the picture the card shows
-                if (b == null) {  // not decoded: the same picture is on screen already, so it moves across
-                    Card had = old.get(r.name);
-                    if (had != null && had.bmp != null) {
-                        b = had.bmp;
-                        had.img.setImageDrawable(null);
-                        had.bmp = null;
-                        uri = oldUri.containsKey(r.name) ? oldUri.get(r.name) : "";
-                    } else if (!r.uri.isEmpty()) uri = "";  // no picture at all (it changed meanwhile, or would not decode)
-                    behind |= !uri.equals(r.uri);
-                }
-                Card c = card(b, r, s.club, headline, desc, uri);
-                LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(dp(240), dp(135));
-                cp.setMargins(0, 0, dp(18), 0);
-                row.addView(c.view, cp);
-                rowCards.add(c.view);
-                if (first == null) first = c.view;
-                if (r.name.equals(f != null ? f.getTag() : null)) byTag = c.view;
-                if (r.m.key.equals(wasMatch) && byMatch == null) byMatch = c.view;
-            }
-            // left / right stop at the ends of a row instead of jumping to another row or to Settings
-            View head = rowCards.get(0), tail = rowCards.get(rowCards.size() - 1);
-            head.setNextFocusLeftId(head.getId());
-            tail.setNextFocusRightId(tail.getId());
-            if (s.club.id.equals(wasClub)) byClub = rowCards.get(Math.min(wasIndex, rowCards.size() - 1));
-            LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            hp.setMargins(-dp(24), -dp(4), -dp(Ui.SIDE), 0);  // cards line up with the club name and run to the screen edge
-            sections.addView(hs, hp);
-            final Integer sx = scrollX.get(s.club.id);
-            if (sx != null) hs.post(new Runnable() { public void run() { hs.scrollTo(sx, 0); } });
-        }
-        // until a card has focus, the details show the first club's next match
-        if (!list.isEmpty() && !list.get(0).refs.isEmpty()) describe(cards.get(list.get(0).refs.get(0).name));
-        else if (detailHead != null) { fadeText(detailHead, ""); fadeText(detailDesc, ""); }
-        recycleAll(decoded);
-        for (Card c : old.values()) if (c.bmp != null) { c.img.setImageDrawable(null); c.bmp.recycle(); }  // not shown any more
-        if (behind) loadLater();  // the same rows: the missing pictures come through update()
-        View target = byTag != null ? byTag : byMatch != null ? byMatch : byClub;
-        if (overlay != null) { /* the match panel keeps focus */ }
-        else if (target != null) target.requestFocus();
-        else if (first != null && (was != null || f == null || !hadCards)) first.requestFocus();  // first open: start on the matches
-        if (overlay == null && getCurrentFocus() == null && settingsButton != null) settingsButton.requestFocus();  // never leave the remote without focus
-    }
-
-    /**
-     * Placeholder cards where a club's row will be, the same size and place as real ones: three pulsing while its
-     * fixtures load, or one with the reason under it when they couldn't be loaded. The sentence is read out either way.
-     */
-    private View skeleton(String sentence, boolean loading) {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(24), dp(9), dp(Ui.SIDE), dp(9));  // as a row of cards
-        box.setContentDescription(sentence);
-        box.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        for (int i = 0; i < (loading ? 3 : 1); i++) {
-            View card = new View(this);
-            card.setBackground(Ui.rounded(this, Ui.SURFACE, 10, 0));
-            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(dp(240), dp(135));
-            cp.setMargins(0, 0, dp(18), 0);
-            row.addView(card, cp);
-        }
-        row.setAlpha(0.6f);
-        box.addView(row);
-        if (loading) {  // 0.6 -> 1.0 -> 0.6 every 1.2 s
-            android.animation.ObjectAnimator a = android.animation.ObjectAnimator.ofFloat(row, View.ALPHA, 0.6f, 1f);
-            a.setDuration(600);
-            a.setRepeatCount(android.animation.ValueAnimator.INFINITE);
-            a.setRepeatMode(android.animation.ValueAnimator.REVERSE);
-            a.start();
-            if (!resumed) a.pause();
-            pulses.add(a);
+        long last = sc != null ? sc.savedAt : Store.lastUpdateAll(app);
+        boolean offline = sc != null ? "offline".equals(sc.mode) : HomeModel.offline(tried, h.empty(), last, stale, Engine.failedAt(app), now);
+        if (loading) { h.status = HomeModel.Status.UPDATING; h.statusText = AppText.t("updating"); }
+        else if (offline) {
+            h.status = HomeModel.Status.OFFLINE;
+            h.statusText = last == 0 ? AppText.t("offline_never")
+                : AppText.f("offline", AppText.days(now, last) == 0 ? I18n.time(last) : AppText.shortDate(last) + " " + I18n.time(last));
         } else {
-            TextView t = Ui.text(this, sentence, 16, Ui.SUB, false);
-            t.setPadding(0, dp(10), 0, 0);
-            t.setMaxWidth(dp(620));
-            t.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);  // the box reads it
-            box.addView(t);
+            h.status = HomeModel.Status.CLOCK;
+            h.statusText = AppText.clock(now) + (sc == null && AppUpdate.available(app) != null ? " · " + AppText.t("update_ready") : "");
         }
-        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        hp.setMargins(-dp(24), -dp(4), -dp(Ui.SIDE), 0);  // as a row of cards
-        box.setLayoutParams(hp);
-        return box;
+        return h;
     }
 
-    private View emptyState() {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(0, dp(60), 0, 0);
-        box.addView(Ui.text(this, I18n.t("empty_title"), 28, Ui.TEXT, true));
-        TextView t = Ui.text(this, I18n.t("empty_text"), 16, Ui.SUB, false);
-        t.setPadding(0, dp(10), 0, dp(24));
-        t.setMaxWidth(dp(620));
-        box.addView(t);
-        TextView b = Ui.button(this, I18n.t("choose_clubs"));
-        b.setOnClickListener(new View.OnClickListener() { public void onClick(View v) {
-            startActivity(new Intent(HomeActivity.this, SettingsActivity.class).putExtra("setup", true));
-        }});
-        box.addView(b, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        b.requestFocus();
-        return box;
-    }
-
-    /** shown: the URI of the picture bmp is (it may be older than r's, or "" for none). */
-    private Card card(Bitmap bmp, final Cards.Ref r, final Teams.Club club, final TextView headline, final TextView desc, String shown) {
-        final Card c = new Card();
-        final FrameLayout f = new FrameLayout(this);
-        c.view = f; c.ref = r; c.club = club; c.headline = headline; c.desc = desc; c.bmp = bmp;
-        f.setId(View.generateViewId());
-        f.setTag(r.name);
-        f.setFocusable(true);
-        f.setFocusableInTouchMode(true);
-        f.setClickable(true);
-        f.setClipToOutline(true);
-        f.setOutlineProvider(new ViewOutlineProvider() {
-            public void getOutline(View v, Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(10)); }
-        });
-        f.setBackgroundColor(Ui.SURFACE);
-        c.img = new ImageView(this);
-        c.img.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        if (bmp != null) c.img.setImageBitmap(bmp);
-        f.addView(c.img, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        final GradientDrawable ring = new GradientDrawable();
-        ring.setCornerRadius(dp(10));
-        ring.setColor(Color.TRANSPARENT);
-        ring.setStroke(dp(3), Color.WHITE);
-        f.setContentDescription(Cards.headline(r) + ". " + Cards.describe(this, club, r));
-        f.setOnFocusChangeListener(new View.OnFocusChangeListener() {
-            public void onFocusChange(View v, boolean has) {
-                Ui.focusMotion(v, has, Ui.CARD);
-                f.setForeground(has ? ring : null);
-                if (has) describe(c);
-            }
-        });
-        f.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { showDetail(c.ref, c.club, r.name); } });
-        cards.put(r.name, c);
-        shownUri.put(r.name, shown);
-        return c;
-    }
-
-    /** Opens the match a home-screen tile asked for, once its card is on screen. */
+    /** Opens the match a home-screen tile asked for, once it is on screen (its club is selected first). */
     private boolean openPending() {
-        if (pendingMatch == null) return false;
-        for (Card c : cards.values()) if (pendingMatch.equals(c.ref.m.key)) {
-            pendingMatch = null;
-            showDetail(c.ref, c.club, c.ref.name);
-            return true;
+        if (pendingMatch == null || shown == null) return false;
+        for (HomeModel.ClubData d : shown.clubs) {
+            List<Match> ms = new ArrayList<>(d.latest);
+            ms.addAll(d.fixtures);
+            if (d.hero != null) ms.add(0, d.hero);
+            for (Match m : ms) if (pendingMatch.equals(m.key)) {
+                pendingMatch = null;
+                if (!d.club.id.equals(layout.selected())) { layout.select(d.club.id); layout.bind(shown); }
+                openMatch(m, d.club);
+                return true;
+            }
         }
-        if (!shownStructure.isEmpty()) pendingMatch = null;  // the match is no longer listed
+        pendingMatch = null;  // the match is no longer listed
         return false;
     }
 
-    // ---------- match details ----------
-    private static final char NBSP = ' ';
-
-    /** A long title breaks between the teams ("Olympiacos –" / "Real Madrid"), never inside a club's name. */
-    static String keepNames(String s, Match m) {
-        for (String n : new String[]{I18n.team(m.home), I18n.team(m.away)}) {
-            if (n != null && n.indexOf(' ') > 0) s = s.replace(n, n.replace(' ', NBSP));
-        }
-        return s.replace(" – ", NBSP + "– ");
-    }
-
-    /** A channel line breaks only after a "·": "Novasports Prime ·" / "ch. 318 on Magenta TV". */
-    static String breakAtDots(String s) {
-        String[] parts = s.split(" · ");
-        StringBuilder b = new StringBuilder();
-        for (int i = 0; i < parts.length; i++) b.append(i > 0 ? NBSP + "· " : "").append(parts[i].replace(' ', NBSP));
-        return b.toString();
-    }
-
-    private void showDetail(final Cards.Ref r, final Teams.Club club, String cardName) {
-        closeDetail();
-        final Match m = r.m;
-        overlay = new FrameLayout(this);
-        overlay.setBackgroundColor(Color.rgb(14, 15, 19));  // the rows behind never show through the text
-        overlay.setClickable(true);
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.HORIZONTAL);
-        panel.setGravity(Gravity.CENTER_VERTICAL);
-        panel.setClipChildren(false);
-        panel.setPadding(dp(Ui.SIDE), dp(Ui.TOP), dp(Ui.SIDE), dp(Ui.TOP));
-        final ImageView img = new ImageView(this);
-        img.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        img.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);  // decorative: the panel's text says it all
-        img.setClipToOutline(true);
-        img.setOutlineProvider(new ViewOutlineProvider() {
-            public void getOutline(View v, Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(14)); }
-        });
-        Card shown = cards.get(cardName);
-        if (shown != null && shown.bmp != null && !shown.bmp.isRecycled()) {  // a copy of the thumbnail until the sharp one is drawn
-            Bitmap thumb = shown.bmp.copy(shown.bmp.getConfig(), false);
-            img.setImageBitmap(thumb);
-            img.setTag(thumb);
-        }
-        panel.addView(img, new LinearLayout.LayoutParams(dp(448), dp(252)));  // 16:9, leaving the text a wider column
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(dp(32), 0, 0, 0);
-        col.setClipChildren(false);
-        col.setClipToPadding(false);
-        StringBuilder spoken = new StringBuilder();
-        TextView h = Ui.text(this, keepNames(Cards.headline(r), m), 28, Ui.TEXT, true);
-        col.addView(h);
-        spoken.append(h.getText());
-        boolean bothSports = club.teams(Teams.basketball(this)).length > 1;  // the sport only says something then
-        TextView comp = Ui.text(this, I18n.comp(m.comp)
-            + (bothSports ? " · " + (m.team.equals("BC") ? I18n.t("src_basket") : I18n.t("src_espn")) : ""), 16, Ui.SUB, false);
-        comp.setPadding(0, dp(6), 0, 0);
-        col.addView(comp);
-        spoken.append(". ").append(comp.getText());
-        String soon = !r.last && "pre".equals(m.state) && !m.tbd ? until(m.start) : "";
-        TextView when = Ui.text(this, I18n.longDate(m.start) + (m.tbd ? " · " + I18n.t("time_tba") : " · " + I18n.time(m.start)), 18, Ui.TEXT, false);
-        when.setPadding(0, dp(14), 0, 0);
-        col.addView(when);
-        spoken.append(". ").append(when.getText());
-        if (!soon.isEmpty()) {  // how soon, on its own line: "in 5 days"
-            TextView inTime = Ui.text(this, soon, 16, Ui.SUB, false);
-            inTime.setPadding(0, dp(2), 0, 0);
-            col.addView(inTime);
-            spoken.append(", ").append(soon);
-        }
-        boolean upcoming = !r.last && !"off".equals(m.state);
-        if (upcoming && m.channelKnown && Where.plain(m)) {  // outside the Greek sources: the channel names as pills
-            col.addView(channelPills(m));
-            spoken.append(". ").append(Cards.where(m, true));
-            if (!m.channelSure) {
-                TextView note = Ui.text(this, I18n.t("table_note"), 14, Ui.SUB, false);
-                note.setPadding(0, dp(6), 0, 0);
-                col.addView(note);
-                spoken.append(". ").append(note.getText());
-            }
-        } else if (upcoming) {
-            TextView where = Ui.text(this, breakAtDots(Cards.where(m, true)), 18, m.channelSure ? Ui.TEXT : Ui.SUB, false);
-            where.setPadding(0, dp(8), 0, 0);
-            col.addView(where);
-            spoken.append(". ").append(where.getText());
-            if ((m.channelKnown && !m.channelSure) || Where.noData(m)) {
-                TextView note = Ui.text(this, I18n.t(Where.noData(m) ? "no_table_note" : "channel_note"), 14, Ui.SUB, false);
-                note.setPadding(0, dp(6), 0, 0);
-                col.addView(note);
-                spoken.append(". ").append(note.getText());
-            }
-        } else if ("off".equals(m.state)) {
-            TextView st = Ui.text(this, I18n.detail(m.detail), 18, Ui.AMBER, true);
-            st.setPadding(0, dp(8), 0, 0);
-            col.addView(st);
-            spoken.append(". ").append(st.getText());
-        }
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setPadding(0, dp(28), 0, dp(4));
-        buttons.setClipChildren(false);
-        buttons.setClipToPadding(false);
-        View firstButton = null;
-        if (upcoming && m.channelKnown && m.channelApp != null) {
-            if (HomeRows.installed(this, m.channelApp)) {
-                TextView open = Ui.button(this, I18n.f("open_app", Cards.appName(m.channelApp)));
-                open.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { OpenActivity.launch(HomeActivity.this, m.channelApp); } });
-                LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                bp.setMargins(0, 0, dp(14), 0);
-                buttons.addView(open, bp);
-                firstButton = open;
-            } else {  // the channel's app isn't on this TV: offer to get it, instead of a dead end
-                TextView get = Ui.button(this, I18n.f("get_app", Cards.appName(m.channelApp)));
-                get.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { openStore(m.channelApp); } });
-                LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                bp.setMargins(0, 0, dp(14), 0);
-                buttons.addView(get, bp);
-                firstButton = get;
-                spoken.append(". ").append(I18n.f("app_missing", Cards.appName(m.channelApp)));
-            }
-        }
-        TextView close = Ui.button(this, I18n.t("close"));
-        close.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { closeDetail(); } });
-        buttons.addView(close);
-        if (firstButton == null) firstButton = close;
-        col.addView(buttons);
-        panel.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        overlay.addView(panel, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        overlay.setTag(cardName);  // the card to go back to (by name: the row may be rebuilt meanwhile)
-        root.addView(overlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        overlay.setAlpha(0f);
-        overlay.animate().alpha(1f).setDuration(150).start();
-        // keep D-pad focus inside the panel
-        sections.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
-        if (settingsButton != null) settingsButton.setFocusable(false);
-        firstButton.requestFocus();
-        overlay.announceForAccessibility(spoken);
-        backCallback = Ui.onBack(this, backCallback, new Runnable() { public void run() { closeDetail(); } });
-        final Context app = getApplicationContext();
-        final FrameLayout mine = overlay;
-        detail.execute(new Runnable() { public void run() {  // full-size card, sharper than the row thumbnail
-            try {
-                I18n.load(app);
-                Where.load(app);
-                final Bitmap big = Cards.draw(app, m, r.stale);
-                ui.post(new Runnable() { public void run() {
-                    if (gone() || overlay != mine) { big.recycle(); return; }
-                    Bitmap thumb = img.getTag() instanceof Bitmap ? (Bitmap) img.getTag() : null;
-                    img.setImageBitmap(big);
-                    img.setTag(big);
-                    if (thumb != null) thumb.recycle();
-                }});
-            } catch (Throwable ignored) { }  // out of memory, say: the thumbnail stays
+    // ---------- the match screen ----------
+    /**
+     * Opens the match screen in the layout's own look (MatchScreen): its images are made on the detail thread, then it
+     * pushes in (220 ms fade and a 16 px rise) with its button focused. Back returns to the item that opened it.
+     */
+    private void showMatch(final Match m, final Teams.Club club) {
+        final HomeModel h = shown;
+        final String lay = builtLayout == null ? Appearance.layout(this) : builtLayout;
+        final Context app = this;
+        final int gen = ++matchRequest;
+        detail.execute(new Runnable() { public void run() {
+            final MatchScreen.Data d;
+            try { d = MatchScreen.prepare(app, lay, m, club, h); }
+            catch (Throwable t) { android.util.Log.w("Fanela", "match screen", t); return; }  // out of memory, say: the home screen stays
+            ui.post(new Runnable() { public void run() {
+                if (gone() || gen != matchRequest || !resumed && !hasWindowFocus()) return;
+                pushMatch(d);
+                detailMatch = m;
+                detailClub = club;
+            }});
         }});
     }
 
-    /** "Usually on  [Sky Sports]  [TNT Sports]": the label, then one rounded pill per channel. */
-    private View channelPills(Match m) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(10), 0, 0);
-        if (!m.channelSure) {
-            TextView lead = Ui.text(this, I18n.t("usually"), 16, Ui.SUB, false);
-            lead.setPadding(0, 0, dp(12), 0);
-            row.addView(lead);
-        }
-        for (String n : Cards.names(m)) {
-            TextView p = Ui.text(this, n, 16, Ui.TEXT, true);
-            p.setSingleLine(true);
-            p.setPadding(dp(14), dp(5), dp(14), dp(5));
-            p.setBackground(Ui.rounded(this, Color.argb(m.channelSure ? 56 : 40, 255, 255, 255), 16, 0));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            lp.setMargins(0, 0, dp(8), 0);
-            row.addView(p, lp);
-        }
-        return row;
+    private int matchRequest;
+
+    /**
+     * New data while the match screen is open: the same match from it (its score, clock and state), the status slot,
+     * whether its channel's app is on the TV now, all prepared again on the detail thread and swapped in place (the
+     * button keeps the focus).
+     */
+    private void refreshMatch(final HomeModel h) {
+        final Match was = detailMatch;
+        final Teams.Club club = detailClub;
+        final FrameLayout o = overlay;
+        if (was == null || club == null || o == null) return;
+        Match found = was;
+        for (Match x : h.all) if (x.key.equals(was.key)) { found = x; break; }
+        final Match m = found;
+        final String lay = builtLayout == null ? Appearance.layout(this) : builtLayout;
+        final Context app = this;
+        final int gen = matchRequest;
+        try {
+            detail.execute(new Runnable() { public void run() {
+                final MatchScreen.Data d;
+                try { d = MatchScreen.prepare(app, lay, m, club, h); }
+                catch (Throwable t) { android.util.Log.w("Fanela", "match screen update", t); return; }  // it keeps what it shows
+                ui.post(new Runnable() { public void run() {
+                    if (gone() || o != overlay || gen != matchRequest) return;  // closed, or another match opened meanwhile
+                    detailMatch = m;
+                    MatchScreen.update(o, d);
+                }});
+            }});
+        } catch (Exception ignored) { }  // shutting down
     }
 
+    private void pushMatch(MatchScreen.Data d) {
+        closeDetail();
+        panelReturn = layout.focusKey();
+        overlay = MatchScreen.build(this, d, new MatchScreen.Actions() {
+            public void act(MatchFacts.Action a, Match m) {
+                if (a == MatchFacts.Action.OPEN) OpenActivity.launch(HomeActivity.this, m.channelApp);
+                else if (a == MatchFacts.Action.GET) openStore(m.channelApp);
+                else closeDetail();
+            }
+        });
+        root.addView(overlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        overlay.setAlpha(0f);
+        overlay.setTranslationY(Ui.px(this, Ui.PUSH_RISE));
+        overlay.animate().alpha(1f).translationY(0).setDuration(Ui.PUSH_MS).setInterpolator(Ui.FAST_OUT_SLOW_IN).start();
+        layout.block(true);  // keep D-pad focus on the screen's button
+        View b = MatchScreen.button(overlay);
+        if (b != null) b.requestFocus();
+        overlay.announceForAccessibility(overlay.getContentDescription());
+    }
+
+    /** Back from the match screen: the home screen with the focus it had (Back reverses the push). */
     private void closeDetail() {
         if (overlay == null) return;
-        String back = (String) overlay.getTag();
-        ImageView img = findBig(overlay);
-        sections.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
-        if (settingsButton != null) settingsButton.setFocusable(true);
-        root.removeView(overlay);
+        final FrameLayout o = overlay;
         overlay = null;
-        backCallback = Ui.onBack(this, backCallback, null);
-        if (img != null) { Bitmap b = (Bitmap) img.getTag(); img.setImageDrawable(null); b.recycle(); }
-        Card c = back == null ? null : cards.get(back);
-        if (c != null) c.view.requestFocus();
-        else if (!cards.isEmpty()) {
-            View first = sections.findViewWithTag(cards.keySet().iterator().next());
-            if (first != null) first.requestFocus();
-        }
-        if (getCurrentFocus() == null && settingsButton != null) settingsButton.requestFocus();
-    }
-
-    private static ImageView findBig(View v) {
-        if (v instanceof ImageView && v.getTag() instanceof Bitmap) return (ImageView) v;
-        if (v instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) {
-            ImageView x = findBig(((ViewGroup) v).getChildAt(i));
-            if (x != null) return x;
-        }
-        return null;
+        detailMatch = null;
+        detailClub = null;
+        o.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        layout.block(false);
+        layout.focus(panelReturn);
+        o.animate().alpha(0f).translationY(Ui.px(this, Ui.PUSH_RISE)).setDuration(Ui.PUSH_MS).withEndAction(new Runnable() { public void run() {
+            root.removeView(o);
+        }}).start();
     }
 }

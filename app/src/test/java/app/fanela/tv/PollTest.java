@@ -30,6 +30,19 @@ public class PollTest {
         assertTrue(HomeActivity.tickDue(NOW + 30000, NOW));
     }
 
+    @Test public void theClockIsReadAgainJustAfterEveryMinute() {
+        long minute = 60000L * 29_000_000L;  // a whole minute
+        assertEquals(60200L, HomeActivity.untilNextMinute(minute));
+        assertEquals(201L, HomeActivity.untilNextMinute(minute + 59999L));
+        assertEquals(30200L, HomeActivity.untilNextMinute(minute + 30000L));
+    }
+
+    @Test public void theStatusClockIsNeverAnnouncedTheRestIs() {
+        assertEquals(android.view.View.ACCESSIBILITY_LIVE_REGION_NONE, AppViews.Masthead.liveRegion(HomeModel.Status.CLOCK));
+        assertEquals(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE, AppViews.Masthead.liveRegion(HomeModel.Status.UPDATING));
+        assertEquals(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE, AppViews.Masthead.liveRegion(HomeModel.Status.OFFLINE));
+    }
+
     @Test public void theNextCycle() {
         assertEquals(3000L, HomeActivity.nextCycle(true, true, Long.MAX_VALUE));
         assertEquals(30000L, HomeActivity.nextCycle(true, false, Long.MAX_VALUE));

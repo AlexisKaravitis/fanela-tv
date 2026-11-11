@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+: the system splash screen is the window background's twin (near-black, the shirt at the same size
+         and place), so the start reads as one branded frame, then the app. -->
+    <style name="Fanela.Launch">
+        <item name="android:windowBackground">@drawable/launch</item>
+        <item name="android:windowSplashScreenBackground">@color/bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>
+    </style>
+</resources>

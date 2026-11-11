@@ -121,6 +121,8 @@ final class I18n {
         p("choose_clubs", "Επιλογή ομάδων", "Choose clubs");
         p("loading_club", "Φόρτωση αγώνων…", "Getting fixtures…"); p("load_failed", "Δεν φόρτωσαν οι αγώνες. Έλεγξε τη σύνδεση της τηλεόρασης στο διαδίκτυο. Θα γίνει νέα προσπάθεια σε λίγο.",
             "Couldn't load fixtures. Check the TV's internet connection. Fanela will try again shortly.");
+        // where a line is all there is room for (a Matchday row's slim line)
+        p("load_failed_short", "Δεν φόρτωσαν οι αγώνες. Νέα προσπάθεια σε λίγο.", "Couldn't load fixtures. Trying again shortly.");
         p("no_connection", "Χωρίς σύνδεση", "No connection");
         p("no_fixtures", "Δεν υπάρχουν αγώνες στο πρόγραμμα αυτή τη στιγμή.", "No fixtures scheduled right now.");
         p("open_app", "Άνοιγμα %s", "Open %s"); p("get_app", "Λήψη %s", "Get %s"); p("app_missing", "Το %s δεν είναι εγκατεστημένο σε αυτή την τηλεόραση.", "%s isn't installed on this TV.");
@@ -129,6 +131,8 @@ final class I18n {
             "Expected channel, based on the home team's TV rights. Check your provider's guide to be sure.");
         p("usually", "Πιθανό", "Likely");  // one hedge word everywhere, the season table included
         p("check_guide", "Δες τον οδηγό του παρόχου σου", "Check your provider's guide");
+        // the same advice where a cell is too narrow for it (the Club fixture row's 330 px watch cell)
+        p("check_guide_short", "Δες τον οδηγό σου", "Check your provider's guide");
         p("selected", "επιλεγμένο", "selected");
         p("checked_title", "Τελευταίος έλεγχος με τις επίσημες σελίδες των διοργανώσεων:", "Last checked against the competitions' official pages:");
         p("no_official_list", "δεν δημοσιεύει λίστα για άλλες χώρες", "publishes no list for other countries");
@@ -183,13 +187,13 @@ final class I18n {
             + "Κανάλια σε άλλες χώρες: οι λίστες τηλεοπτικών συνεργατών που δημοσιεύουν η UEFA, η Premier League, η LaLiga, η Lega Serie A, η Bundesliga, "
             + "η LFP, η Eredivisie, η TFF, το MLS, το NBA και η EuroLeague Basketball· για τη Liga Portugal, οι ανακοινώσεις των ίδιων των καναλιών. Όπου αυτές δεν αναφέρουν κάτι, το Fanela παίρνει τα στοιχεία από τη Wikipedia: %s "
             + "(συντάκτες της Wikipedia, άδεια CC BY-SA 4.0, creativecommons.org/licenses/by-sa/4.0). Ο πίνακας του Fanela που προκύπτει διατίθεται με την ίδια άδεια.\n\n"
-            + "Οι ώρες και τα κανάλια μπορεί να αλλάξουν. Γραμματοσειρά: Google Sans (SIL Open Font License).",
+            + "Οι ώρες και τα κανάλια μπορεί να αλλάξουν. Γραμματοσειρές: Google Sans και Roboto Condensed (SIL Open Font License / Apache License 2.0· οι άδειές τους ολόκληρες στο τέλος της σελίδας).",
             "Fixtures and scores: ESPN, EuroLeague, TheSportsDB.\n\n"
             + "Channels in Greece: the MagentaTV and Sport24 TV guides, SofaScore, and each club's TV rights for the season.\n\n"
             + "Channels in other countries: the TV partner lists published by UEFA, the Premier League, LaLiga, Lega Serie A, the Bundesliga, "
             + "the LFP, the Eredivisie, the TFF, MLS, the NBA and EuroLeague Basketball; for Liga Portugal, the broadcasters' own announcements. Where they say nothing, Fanela uses Wikipedia: %s "
             + "(by Wikipedia contributors, CC BY-SA 4.0, creativecommons.org/licenses/by-sa/4.0). Fanela's table made from them is shared under the same licence.\n\n"
-            + "Times and channels can change. Font: Google Sans (SIL Open Font License).");
+            + "Times and channels can change. Fonts: Google Sans and Roboto Condensed (SIL Open Font License / Apache License 2.0; their licences in full at the end of this page).");
         p("privacy_short", "Χωρίς λογαριασμό, διαφημίσεις ή παρακολούθηση. Οι επιλογές σου μένουν σε αυτή την τηλεόραση.",
             "No account, no ads, no tracking. Your choices stay on this TV.");
         p("privacy_full", PRIVACY_EL, PRIVACY_EN);
@@ -421,6 +425,8 @@ final class I18n {
     static String enName(String raw) {
         if (raw == null || raw.trim().isEmpty()) return "?";
         String r = raw.trim();
+        // the feeds' "ASK Karditsas (BC)" is Karditsa everywhere, as fans and the league say it (cards, titles, Settings)
+        if (r.matches("(?i)ASK Karditsas?( B\\.?C\\.?)?")) return "Karditsa";
         if (!r.matches(".*[\\u0370-\\u03FF].*")) return r;
         String e = EN.get(Cards.key(r));
         if (e != null) return e;
@@ -508,6 +514,44 @@ final class I18n {
         for (String[] p : pairs) SHORT.put(p[0], p[1]);
     }
 
+    /**
+     * The shorter form a card falls back to when a club's card name doesn't fit even at the style's smallest size
+     * (CardModel.fitName): the name fans use when space is tight. Keyed by the card name in either language.
+     */
+    static String tightName(String cardName) { return cardName == null ? null : TIGHT.get(cardName); }
+
+    /**
+     * A club's abbreviation, used only where its card name can't fit even by running on (CardModel.fitName step 4).
+     * Panathinaikos also has PAO / ΠΑΟ as its short form (TIGHT), so it takes PAO before running on at a small size.
+     */
+    static String abbreviation(String cardName) {
+        if (cardName == null) return null;
+        switch (cardName) {
+            case "Panathinaikos": return "PAO";
+            case "Παναθηναϊκός": return "ΠΑΟ";
+            default: return null;
+        }
+    }
+
+    private static final Map<String, String> TIGHT = new HashMap<>();
+    static {
+        String[][] pairs = {
+            {"Partizan Belgrade", "Partizan"}, {"Partizan Mozzart Bet", "Partizan"}, {"Crvena Zvezda", "Zvezda"},
+            {"Crvena zvezda", "Zvezda"}, {"Crvena Zvezda Meridianbet", "Zvezda"}, {"Red Star Belgrade", "Red Star"},
+            {"Ερυθρός Αστέρας", "Ερυθρός"}, {"Maccabi Tel Aviv", "Maccabi"}, {"Maccabi Tel-Aviv", "Maccabi"},
+            {"Maccabi Playtika Tel Aviv", "Maccabi"}, {"Hapoel Tel Aviv", "Hapoel TA"}, {"Hapoel TLV", "Hapoel TA"},
+            {"Χάποελ Τελ Αβίβ", "Χάποελ ΤΑ"}, {"Hapoel Jerusalem", "Hapoel JLM"}, {"Newcastle United", "Newcastle"},
+            {"Tottenham Hotspur", "Spurs"}, {"Tottenham", "Spurs"}, {"Borussia Dortmund", "Dortmund"},
+            {"Asteras Tripoli", "Asteras"}, {"Asteras Aktor", "Asteras"}, {"Αστέρας Τρ.", "Αστέρας"},
+            {"Αστέρας Τρίπολης", "Αστέρας"}, {"Μπορούσια Ντόρτμουντ", "Ντόρτμουντ"}, {"Eintracht Frankfurt", "Frankfurt"},
+            {"Άιντραχτ Φρανκφούρτης", "Άιντραχτ"}, {"Φενέρμπαχτσε", "Φενέρ"}, {"Fenerbahce Beko", "Fenerbahce"},
+            {"Γαλατασαράι", "Γαλατά"},
+            // Panathinaikos (football and basketball share the card name): PAO, as its fans and its neighbours' sizes have it
+            {"Panathinaikos", "PAO"}, {"Παναθηναϊκός", "ΠΑΟ"},
+            {"Μπότεβγκραντ", "Μπάλκαν"}};
+        for (String[] p : pairs) TIGHT.put(p[0], p[1]);
+    }
+
     // ---------- dates ----------
     static long startOfDay(Calendar c) {
         Calendar d = (Calendar) c.clone();
@@ -536,7 +580,15 @@ final class I18n {
 
     private static volatile boolean h24 = true;
 
-    /** Follows the TV's 12/24-hour setting (read with the language). */
+    /**
+     * The clock: Greek is always 24-hour ("21:15", never "9:15 μ.μ."), whatever the TV's setting; English follows the
+     * TV's 12/24-hour setting (read with the language).
+     */
+    static boolean clock24() { return h24 || el(); }
+
+    /** Tests: the TV's 12/24-hour setting. */
+    static void clock24(boolean on) { h24 = on; }
+
     /** "Saturday 8 November" / "Σάββατο 8 Νοεμβρίου" (today / tomorrow / yesterday when close). */
     static String longDate(long t) {
         String d = day(t);
@@ -545,7 +597,14 @@ final class I18n {
             .format(new java.util.Date(t));
     }
 
+    /** "Thu 12 Nov" / "Πεμ 12/11": the date alone, never "today" or "tomorrow" (it goes with a soon-word). */
+    static String weekdayDate(long t) {
+        return new SimpleDateFormat(el() ? "EEE d/M" : us ? "EEE, MMM d" : "EEE d MMM", el() || !us ? locale() : Locale.US)
+            .format(new java.util.Date(t));
+    }
+
     static String time(long t) {
-        return new SimpleDateFormat(h24 ? "HH:mm" : "h:mm a", h24 || us && !el() ? Locale.US : locale()).format(new java.util.Date(t));
+        boolean h = clock24();
+        return new SimpleDateFormat(h ? "HH:mm" : "h:mm a", h || us ? Locale.US : locale()).format(new java.util.Date(t));
     }
 }

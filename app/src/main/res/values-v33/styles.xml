@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 13+: the splash shows the mark however the app is opened (the TV's tile opens LaunchActivity, which
+         hands over to this screen; without this the system shows a plain colour for a hand-over). -->
+    <style name="Fanela.Launch">
+        <item name="android:windowBackground">@drawable/launch</item>
+        <item name="android:windowSplashScreenBackground">@color/bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>
+        <item name="android:windowSplashScreenBehavior">icon_preferred</item>
+    </style>
+</resources>

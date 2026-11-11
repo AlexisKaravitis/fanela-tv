@@ -92,6 +92,73 @@ final class Brand {
         } catch (Exception ignored) { }  // never in the way of the app itself
     }
 
+    // ---------- each club's row logo (FB-3) ----------
+
+    /** The disc behind a row logo: the cards' dark (the launcher masks the square to a circle). */
+    static final int ROW_DISC = 0xFF1B2024;
+    /** The row logo's size: the launcher shows it at 120 px on a 1080p TV, focused or not. */
+    static final int ROW_LOGO = 160;
+
+    /**
+     * A club's row logo: the Fanela shirt in the club's painted kit (ClubTokens.painted: the colour the cards paint it
+     * in), collar and cuffs in its second colour, on the dark disc. Each row then says whose it is at a glance, where
+     * every row used to carry the favourite club's shirt. {fill, trim} as ARGB.
+     */
+    static int[] rowShirt(ClubTokens t) {
+        int fill = t.kitA, trim = t.kitB;
+        // a second colour that doesn't show on the shirt (a one-colour kit): white or ink, whichever stands out
+        if (ClubTokens.contrast(fill, trim) < 1.6) trim = ClubTokens.luminance(fill) > 0.4 ? 0xFF141416 : 0xFFF2F2F4;
+        return new int[]{fill, trim};
+    }
+
+    /** What a club's row logo depends on (it is redrawn when this changes: the club's colours, the art). */
+    static String rowLogoTag(ClubTokens t) {
+        int[] c = rowShirt(t);
+        return "club2:" + Integer.toHexString(c[0]) + ":" + Integer.toHexString(c[1]);
+    }
+
+    /** Draws a club's row logo (ROW_LOGO square, opaque). */
+    static android.graphics.Bitmap rowLogo(Context c, ClubTokens t) {
+        int[] col = rowShirt(t);
+        int fill = col[0], trim = col[1];
+        android.graphics.Bitmap out = android.graphics.Bitmap.createBitmap(ROW_LOGO, ROW_LOGO, android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas cv = new android.graphics.Canvas(out);
+        cv.drawColor(ROW_DISC);
+        android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+        o.inScaled = false;
+        o.inMutable = true;
+        // a trim that doesn't show on the dark disc (black, navy): the art with the trim set in from the edge
+        boolean inset = ClubTokens.contrast(trim, ROW_DISC) < 3;
+        android.graphics.Bitmap s = android.graphics.BitmapFactory.decodeResource(c.getResources(), inset ? R.drawable.shirt_inset : R.drawable.shirt, o);
+        if (s == null) return out;
+        int w = s.getWidth(), h = s.getHeight();
+        int[] px = new int[w * h];
+        s.getPixels(px, 0, w, 0, 0, w, h);
+        for (int i = 0; i < px.length; i++) px[i] = Logo.recolor(px[i], fill & 0xFFFFFF, trim & 0xFFFFFF);
+        // a shirt that nearly disappears on the disc (a black kit): an edge in its trim colour
+        if (ClubTokens.contrast(fill, ROW_DISC) < 2) edge(px, w, h, trim, Math.max(2, Math.round(w * 0.014f)));
+        s.setPixels(px, 0, w, 0, 0, w, h);
+        int size = Math.round(ROW_LOGO * 0.66f), top = (ROW_LOGO - size) / 2 - 3;  // raised a little to look centred
+        android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG | android.graphics.Paint.ANTI_ALIAS_FLAG);
+        cv.drawBitmap(s, null, new android.graphics.Rect((ROW_LOGO - size) / 2, top, (ROW_LOGO + size) / 2, top + size), p);
+        s.recycle();
+        return out;
+    }
+
+    /** An edge passes px wide around the shirt in the trim colour, strong then soft at its outside. */
+    static void edge(int[] px, int w, int h, int trim, int passes) {
+        for (int pass = 0; pass < passes; pass++) {
+            int[] src = px.clone();
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+                int i = y * w + x;
+                if ((src[i] >>> 24) > 100) continue;
+                boolean near = (x > 0 && (src[i - 1] >>> 24) > 180) || (x < w - 1 && (src[i + 1] >>> 24) > 180)
+                    || (y > 0 && (src[i - w] >>> 24) > 180) || (y < h - 1 && (src[i + w] >>> 24) > 180);
+                if (near) px[i] = (pass < passes - 1 ? 0xE0 : 0x60) << 24 | (trim & 0xFFFFFF);
+            }
+        }
+    }
+
     private static boolean onlyOne(PackageManager pm, Context c, String want) {
         for (String k : NAMES) if (!k.equals(want) && enabled(pm, new ComponentName(c, alias(k)), k)) return false;
         return true;

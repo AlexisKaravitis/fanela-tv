@@ -1,3 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Channel logos are looked up by name (Channels / Net.image "res:" URLs): keep them in release builds. -->
-<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/ch_*,@raw/channels,@raw/ofl_google_sans" />
+<!-- Channel logos are looked up by name (Channels / Net.image "res:" URLs): keep them in release builds. The font
+     licences ship with the fonts (Settings › Sources and credits shows them); kept even if nothing named them. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/ch_*,@raw/channels,@raw/ofl_google_sans,@raw/apache_roboto" />

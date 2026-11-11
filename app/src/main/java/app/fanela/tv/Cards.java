@@ -22,7 +22,7 @@ import java.util.Set;
 final class Cards {
     static final String MAGENTA = "gr.cosmote.cosmotetv.androidtv", EON = "com.ug.eon.android.tv",
         SPORTFM = "gr.sportfmtv.app", ANT1 = "gr.antenna.ant1.screen";
-    static final int CARD_VERSION = 13;  // bump when the drawing changes: every card is redrawn once
+    static final int CARD_VERSION = 20;  // bump when the drawing changes: every card is redrawn once
 
     // ---------- where to watch (best guess until a TV guide confirms it) ----------
     /** Greek TV rights. Football / Basket League: 2026-27. EuroLeague + EuroCup: Nova until the end of 2027-28. */
@@ -346,7 +346,12 @@ final class Cards {
     }
 
     static void render(Context c, Match m, boolean stale, String name) throws Exception {
-        saveAtomic(c, draw(c, m, stale, name.contains("_tv")), name);
+        saveAtomic(c, draw(c, m, stale, name.contains("_tv")), name, false);
+    }
+
+    /** A card for the TV's home screen: in the viewer's card style, saved at full size (the launcher shows 640 px). */
+    static void renderTv(Context c, Teams.Club k, Match m, boolean stale, String name, long now) throws Exception {
+        saveAtomic(c, CardStyles.draw(c, k, m, stale, Appearance.cardStyle(c), Appearance.showScores(c), now), name, true);
     }
 
     /** The card at full size (960x540), e.g. for the match screen. */
@@ -566,8 +571,11 @@ final class Cards {
         cv.restore();
     }
 
-    static void saveAtomic(Context c, Bitmap big, String name) throws Exception {
-        Bitmap b = Bitmap.createScaledBitmap(big, W / 2, H / 2, true);
+    static void saveAtomic(Context c, Bitmap big, String name) throws Exception { saveAtomic(c, big, name, false); }
+
+    /** full: keep 960x540 (home-screen cards, shown at 544-640 px); else half size (the app's own rows). */
+    static void saveAtomic(Context c, Bitmap big, String name, boolean full) throws Exception {
+        Bitmap b = full ? big.copy(Bitmap.Config.ARGB_8888, false) : Bitmap.createScaledBitmap(big, W / 2, H / 2, true);
         b.setHasAlpha(false);  // the card is opaque: an RGB file, decoded at half the memory (RGB_565)
         File f = new File(c.getFilesDir(), name + ".png");
         File tmp = new File(c.getFilesDir(), name + ".png." + Thread.currentThread().getId() + ".tmp");
@@ -628,14 +636,15 @@ final class Cards {
     }
 
     /**
-     * The logo next to each row on the TV's home screen: the Fanela shirt in the favourite club's colours (Logo.rowLogo),
-     * the same for every row. The row's title already names the club and its cards show the crests; the logo says which
-     * app the row comes from. Drawn only when the colours change.
+     * The logo next to a club's row on the TV's home screen: the Fanela shirt in that club's kit on the cards' dark disc
+     * (Brand.rowLogo), so each row says whose it is and which app it comes from. Stored when the row is created (before
+     * the add-row prompt) and redrawn only when the club's colours change.
      */
-    static HomeRows.Logo channelLogoLazy(final Context c) {
+    static HomeRows.Logo channelLogoLazy(final Context c, final Teams.Club k) {
+        final ClubTokens t = CardStyles.tokens(k, (ClubTokens.CrestInfo) null, null);
         return new HomeRows.Logo() {
-            public String tag() { Ui.theme(c); return Logo.rowLogoTag(); }
-            public Bitmap get() { Ui.theme(c); return Logo.rowLogo(c); }
+            public String tag() { return Brand.rowLogoTag(t); }
+            public Bitmap get() { return Brand.rowLogo(c, t); }
         };
     }
 
@@ -662,13 +671,18 @@ final class Cards {
     static synchronized Ref ensure(Context c, Teams.Club k, Match m, String name, boolean last, long now) {  // one writer per card file
         SharedPreferences sp = c.getSharedPreferences("cards", Context.MODE_PRIVATE);
         boolean stale = Store.stale(c, k.id, m.team);
+        boolean tv = name.contains("_tv");
         String sig = digest(CARD_VERSION + I18n.lang() + m.signature() + stale + I18n.day(m.start) + I18n.time(m.start)
-            + images(c, m));  // redraw when images arrive
+            + images(c, m)  // redraw when images arrive
+            // the TV card: its style, the scores setting, its state words, and the club's own crest (the ghost, and
+            // Signature's sharp-crest test: a card drawn before it was cached is redrawn once it is)
+            + (tv ? Appearance.cardStyle(c) + Appearance.showScores(c) + CardModel.of(m, true, stale, now).stateLine
+                + k.crest + have(c, k.crest) : ""));
         String uri = sp.getString("uri_" + name, null);
         File f = new File(c.getFilesDir(), name + ".png");
         if (uri == null || !sig.equals(sp.getString("sig_" + name, null)) || !f.exists()) {
             try {
-                render(c, m, stale, name);
+                if (tv) renderTv(c, k, m, stale, name, now); else render(c, m, stale, name);
                 uri = "content://" + ArtProvider.authority(c) + "/" + name + ".png?v=" + now;
                 sp.edit().putString("sig_" + name, sig).putString("uri_" + name, uri).apply();
             } catch (Throwable t) {
@@ -760,8 +774,21 @@ final class Cards {
         String stale = r.stale ? " · " + I18n.t("not_updated") + " (" + I18n.t("last_update") + " " + I18n.day(Store.lastUpdate(c, k.id, m.team))
             + " " + I18n.time(Store.lastUpdate(c, k.id, m.team)) + ")" : "";
         if ("off".equals(m.state)) return I18n.comp(m.comp) + " · " + I18n.detail(m.detail) + " · " + I18n.day(m.start) + stale;  // no channel for a match that is off
-        String state = live ? I18n.detail(m.detail) : when(m) + ("DELAYED".equals(m.detail) ? " · " + I18n.detail(m.detail) : "");
+        // scores hidden: an extra-time, penalties or overtime phase would tell that the match is level
+        boolean quiet = live && !Appearance.showScores(c) && CardModel.revealsLevel(m.detail);
+        String state = quiet ? I18n.t("live") : live ? I18n.detail(m.detail)
+            : when(m) + ("DELAYED".equals(m.detail) ? " · " + I18n.detail(m.detail) : "");
         return I18n.comp(m.comp) + " · " + state + " · " + where(m) + stale;
+    }
+
+    /**
+     * The title when scores are hidden on the TV: the state and the teams, never the numbers, and never "(pens)" or
+     * "(AET)": extra time or penalties would tell that the match was level.
+     */
+    static String headlineNoScore(Ref r) {
+        Match m = r.m;
+        if (r.last) return I18n.t("final") + ": " + m.title();
+        return live(m) ? I18n.t("live") + " · " + m.title() : m.title();
     }
 
     static String headline(Ref r) {
@@ -773,7 +800,7 @@ final class Cards {
 
     static void publish(Context c, Teams.Club k, List<Match> all) throws Exception {
         long now = System.currentTimeMillis();
-        long id = HomeRows.channel(c, k.rowKey(), k.heading(), channelLogoLazy(c));
+        long id = HomeRows.channel(c, k.rowKey(), k.heading(), channelLogoLazy(c, k));
         SharedPreferences sp = c.getSharedPreferences("cards", Context.MODE_PRIVATE);
         List<HomeRows.Tile> tiles = new ArrayList<>();
         StringBuilder rowSig = new StringBuilder();
@@ -798,7 +825,7 @@ final class Cards {
                 t.poster = r.uri;
                 t.app = !last && m.channelKnown && HomeRows.installed(c, m.channelApp) ? m.channelApp : null;
                 t.match = m.key;
-                t.title = headline(r);
+                t.title = Appearance.showScores(c) ? headline(r) : headlineNoScore(r);  // the launcher's title must not spoil
                 t.desc = describe(c, k, r);
                 t.live = !last && live(m);
                 tiles.add(t);

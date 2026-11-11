@@ -168,10 +168,12 @@ final class Net {
                 Bitmap s = Bitmap.createScaledBitmap(bm, bm.getWidth() * 384 / side, bm.getHeight() * 384 / side, true);
                 if (s != bm) { bm.recycle(); bm = s; }
             }
-            File tmp = new File(f.getPath() + ".tmp");
+            // a file of this thread's own: two screens may fetch the same crest at once (Settings' tiles and the
+            // refresh's followed clubs), and a shared temporary file would be written by one while the other renames it
+            File tmp = new File(f.getPath() + "." + android.os.Process.myTid() + ".tmp");
             try (FileOutputStream out = new FileOutputStream(tmp)) { bm.compress(Bitmap.CompressFormat.PNG, 100, out); }
             bm.recycle();
-            if (!tmp.renameTo(f)) throw new IOException("rename");
+            if (!tmp.renameTo(f)) { tmp.delete(); if (!f.exists()) throw new IOException("rename"); }
             fail.delete();
         } catch (Throwable t) {
             // network trouble (offline, slow, backoff) or a cancelled fetch: try again next time, no 6-hour pause

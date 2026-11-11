@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Fanela shirt (64 dp: 128 px on a 1080p TV), centred in whatever box it is given: the window background's mark
+     and, on Android 12+, the splash screen's icon (a 288 dp box), so both put it at the same size and place. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:gravity="center" android:width="64dp" android:height="64dp">
+        <bitmap android:src="@drawable/shirt" android:tint="#D9F4F0EA" android:filter="true" />
+    </item>
+</layer-list>

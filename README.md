@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/AlexisKaravitis/fanela-tv/releases/latest"><img alt="Latest release" src="https://img.shields.io/badge/release-v1.1.2-1565c0"></a>
+  <a href="https://github.com/AlexisKaravitis/fanela-tv/releases/latest"><img alt="Latest release" src="https://img.shields.io/badge/release-v1.2.0-1565c0"></a>
   <img alt="Android TV 8.0+" src="https://img.shields.io/badge/Android%20TV-8.0%2B-3ddc84">
   <img alt="Languages" src="https://img.shields.io/badge/languages-English%20%7C%20%CE%95%CE%BB%CE%BB%CE%B7%CE%BD%CE%B9%CE%BA%CE%AC-555">
   <img alt="No ads" src="https://img.shields.io/badge/ads-none-555">
@@ -16,7 +16,8 @@ clubs once, from the Super League to the Premier League, LaLiga or the NBA, and 
 scores and results, and where each game is on: in Greece the exact channel with its number on Magenta TV, elsewhere
 the channels that hold the competition's TV rights in your country.
 
-It is made for the remote: one row per club, big cards, and nothing to sign up for.
+It is made for the remote: your club's next match large on the screen, in your club's colours, and nothing to sign
+up for.
 
 ![Fanela home screen](docs/screenshots/home.png)
 
@@ -36,13 +37,18 @@ It is made for the remote: one row per club, big cards, and nothing to sign up f
 - **Where to watch, by country.** Set your country (it starts from the TV's own). Outside Greece each card shows who
   holds that competition's rights there this season, for example "Likely on Sky Sports or TNT Sports" in the UK.
   When no official list exists it says so plainly: "Check your provider's guide".
-- **Matches in order.** Whatever is live comes first, then the coming matches of both sports by date, then the latest
-  results. The line under the header describes the match you're on.
+- **Two layouts.** Club shows one club at a time in its colours: the next match large, the latest results, then the
+  fixtures, with your clubs in a rail on the left. Matchday puts the next match on a stage, with rows of cards for
+  every club below.
 - **In Greece, the channel for every match.** The channel logo and its Magenta TV number come from the Greek TV guides. Before a
   guide lists a game, Fanela shows the channel that holds the home team's TV rights and marks it "Likely".
 - **Live scores** every 30 seconds while the app is open, then the result and whether your club won, drew or lost.
 - **Rows on the TV's home screen.** On TVs with the classic Android TV home screen, each club gets its own row of
-  cards, drawn large enough to read from the sofa, so you can see the next game without opening the app.
+  cards, drawn large enough to read from the sofa, so you can see the next game without opening the app. Each row
+  carries the Fanela shirt in that club's colours.
+- **Five card styles.** Signature, Clean, Kit, Ticket and Clash, for the home-screen rows and the cards in the app,
+  with live previews in Settings > Appearance. A switch hides scores on the home screen, for matches you'll watch
+  later.
 - **Your club's colours.** Choose a favourite club and the app's accents, its logo and even its tile on the TV take
   on that club's kit.
 - **English or Greek**, switchable at any time, with Greek names for the clubs of every league.
@@ -54,22 +60,33 @@ It is made for the remote: one row per club, big cards, and nothing to sign up f
 |---|---|
 | ![Match with a confirmed channel](docs/screenshots/match.png) | ![Match with a likely channel](docs/screenshots/match-likely.png) |
 | A match the TV guide has listed: channel and number. | Not listed yet: the channel that usually has it, and a way to get the app. |
-| ![Choosing clubs by league](docs/screenshots/clubs.png) | ![Settings](docs/screenshots/settings.png) |
-| Pick clubs league by league. The badge is how many you follow. | Language, favourite club, country, basketball and home-screen rows. |
+| ![The Matchday layout](docs/screenshots/matchday.png) | ![Settings](docs/screenshots/settings.png) |
+| Matchday: the next match on a stage, cards for every club below. | Language, favourite club, country, basketball, home-screen rows and appearance. |
+| ![Choosing clubs by league](docs/screenshots/clubs.png) | ![Choosing a country](docs/screenshots/country.png) |
+| Pick clubs league by league. The badge is how many you follow. | The country sets the channels and which leagues come first. |
 | ![Fanela in the UK](docs/screenshots/abroad-home.png) | ![A Premier League match seen from the UK](docs/screenshots/abroad-match.png) |
 | Outside Greece: the season's rights holders for your country. | Newcastle against Arsenal, seen from the UK. |
-| ![A match with no known TV partner](docs/screenshots/check-guide.png) | ![Choosing a country](docs/screenshots/country.png) |
-| No official list for your country: the app says so. | The country sets the channels and which leagues come first. |
-| ![Fanela in Greek](docs/screenshots/home-greek.png) | ![Fanela row on the Android TV home screen](docs/screenshots/home-screen-row.png) |
-| The whole app in Greek. | A club's row on the TV's home screen, with the Fanela logo. |
+| ![A match with no known TV partner](docs/screenshots/check-guide.png) | ![Fanela in Greek](docs/screenshots/home-greek.png) |
+| No official list for your country: the app says so. | The whole app in Greek, here in PAOK's colours. |
+
+### Card styles on the TV's home screen
+
+| | |
+|---|---|
+| ![Signature cards on the Android TV home screen](docs/screenshots/home-screen-row.png) | ![Clean cards](docs/screenshots/home-screen-clean.png) |
+| Signature, the default: your club's colours and its crest. Each row has its own shirt logo. | Clean: calm and minimal. |
+| ![Kit cards](docs/screenshots/home-screen-kit.png) | ![Ticket cards](docs/screenshots/home-screen-ticket.png) |
+| Kit: your club's shirt down the side. | Ticket: a match ticket with the channel on the stub. |
+| ![Clash cards](docs/screenshots/home-screen-clash.png) | ![Settings > Appearance](docs/screenshots/appearance.png) |
+| Clash: both clubs' colours on a diagonal. | Settings > Appearance: live previews, the app layout and the scores switch. |
 
 ## Install
 
 Fanela is not on Google Play. You install the APK yourself, which takes about five minutes the first time.
 
-1. Download `fanela-1.1.2.apk` from the [Releases page](https://github.com/AlexisKaravitis/fanela-tv/releases/latest).
+1. Download `fanela-1.2.0.apk` from the [Releases page](https://github.com/AlexisKaravitis/fanela-tv/releases/latest).
 2. Copy it to the TV with **Send Files to TV** or a USB stick, or install it from a computer with
-   `adb install fanela-1.1.2.apk`.
+   `adb install fanela-1.2.0.apk`.
 3. Open Fanela, choose a language and your country, pick your clubs and press **Done**.
 
 The [install guide](docs/INSTALL.md) has every step, including how to allow installs from unknown sources on Sony,
@@ -118,7 +135,7 @@ its data is more than 6 hours old.
 
 | | |
 |---|---|
-| `main` | The current release, 1.1.2 (tag `v1.1.2`). |
+| `main` | The current release, 1.2.0 (tag `v1.2.0`). |
 | `v1.0.0` | The first release, kept as a tag. |
 
 Every release and its APK is on the [Releases page](https://github.com/AlexisKaravitis/fanela-tv/releases).
@@ -143,8 +160,8 @@ your real setup. Release builds are signed with a key that is not in the reposit
 | Path | What |
 |---|---|
 | `app/src/main/java/app/fanela/tv` | The app: plain Java, framework Views, no third-party libraries |
-| `app/src/main/res/raw` | Bundled data: the channel line-up, the broadcaster tables and the Google Sans font licence |
-| `app/src/debug` | Debug-only tools: card renders for every state and a data audit for every club |
+| `app/src/main/res/raw` | Bundled data: the channel line-up, the broadcaster tables and the font licences |
+| `app/src/debug` | Debug-only tools: card renders for every state and style, fixed home screens for screenshots, and a data audit for every club |
 | `app/src/test` | Unit tests |
 | `design/make_brand.py` | Draws the shirt logo, the app icon and TV banner in every kit colour, and the store graphics |
 | `store/graphics` | Icon, banner and feature graphic |
@@ -161,4 +178,4 @@ sources listed above; the broadcaster tables are built in. Full policy: [docs/PR
 
 Copyright © 2026 Alexis Karavitis. All rights reserved. The code is shared here for reference; please ask before
 reusing it. The Wikipedia-derived table (`broadcasters_wikipedia.json`) is shared under CC BY-SA 4.0, as its source
-requires. Google Sans is used under the SIL Open Font License.
+requires. Google Sans is used under the SIL Open Font License and Roboto Condensed under the Apache License 2.0.

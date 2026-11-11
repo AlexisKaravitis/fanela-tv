@@ -226,6 +226,18 @@ final class Teams {
         return null;
     }
 
+    /**
+     * A basketball side's crest is its club's own (Olympiacos' crest, not the "Olympiacos Basketball" shield or a
+     * sponsor's): the club's ESPN crest when the side is a known club's (BASKET: EuroLeague code or TheSportsDB id),
+     * else the feed's. code / sdbId may be null.
+     */
+    static String clubCrest(String code, String sdbId, String feedCrest) {
+        for (String[] b : BASKET)
+            if ((code != null && !b[1].isEmpty() && b[1].equals(code)) || (sdbId != null && !b[2].isEmpty() && b[2].equals(sdbId)))
+                return crestUrl(b[0]);
+        return feedCrest == null ? "" : feedCrest;
+    }
+
     private static String comp2026(String id) {
         for (String[] b : BASKET) if (b[0].equals(id) && !b[3].isEmpty()) return b[3];
         return null;
@@ -381,9 +393,23 @@ final class Teams {
             .putString("meta_league_" + justFollowed.id, justFollowed.league).putString("meta_color_" + justFollowed.id, justFollowed.color == null ? "" : justFollowed.color);
         // apply(): every reader is in this process, and SharedPreferences updates its in-memory copy at once
         ed.apply();
-        if (justFollowed != null)  // fetch it on the next refresh, even if it was followed (and fetched) a moment ago
+        if (justFollowed != null) {  // fetch it on the next refresh, even if it was followed (and fetched) a moment ago
             c.getSharedPreferences("engine", Context.MODE_PRIVATE).edit().remove("lastFull_" + justFollowed.id).remove("sig_" + justFollowed.id)
                 .remove("res_" + justFollowed.id).apply();
+            cacheCrest(c, justFollowed.crest);
+        }
+    }
+
+    private static final java.util.concurrent.ExecutorService CRESTS = java.util.concurrent.Executors.newSingleThreadExecutor();
+
+    /** A followed club's crest is downloaded as it is followed: the Club rail reads it from the TV at once. */
+    static void cacheCrest(Context c, final String url) {
+        if (url == null || url.isEmpty() || Net.imageFile(c, url).exists()) return;
+        final Context app = c.getApplicationContext();
+        CRESTS.execute(new Runnable() { public void run() {
+            Engine.background();
+            try { Net.fetchImage(app, url); } catch (Throwable ignored) { }
+        }});
     }
 
     /** The club whose colours the app wears: the one chosen in Settings while it is followed, else the first followed. */

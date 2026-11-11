@@ -41,7 +41,7 @@
         android:theme="@style/Fanela">
 
         <activity android:name=".HomeActivity" android:exported="true" android:launchMode="singleTask"
-            android:configChanges="keyboard|keyboardHidden|navigation" />
+            android:theme="@style/Fanela.Launch" android:configChanges="keyboard|keyboardHidden|navigation" />
 
         <!-- The tiles below open this first: it starts the main screen in a task of its own and closes, so switching
              tiles (Brand) never closes the app. No window, no recents entry, a task apart from the app's. -->
@@ -49,7 +49,8 @@
             android:taskAffinity="" android:excludeFromRecents="true" android:noHistory="true" />
 
         <!-- The app's tile on the TV, one per kit colour; Brand enables the one closest to the favourite club's kit.
-             .Launch is the original blue icon and banner. -->
+             .Launch is the original blue icon and banner, which is also the application icon (the one Android TV's
+             "add this row?" prompt shows). -->
         <activity-alias android:name=".Launch" android:targetActivity=".LaunchActivity" android:exported="true"
             android:enabled="true">
             <intent-filter>

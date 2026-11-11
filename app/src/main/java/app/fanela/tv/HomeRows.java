@@ -23,8 +23,10 @@ import java.util.Set;
  * Home-screen rows (Android TV "preview channels"): one row per followed club.
  * Only the classic Android TV home screen shows them; Google TV and most operator launchers do not, so the app's own
  * home screen is the main place for fixtures and the rows are an optional extra (Settings > Home-screen rows).
- * Switching a row off empties it (the home screen hides empty rows) and keeps it for 7 days, so switching it back on
- * restores it in place without asking again; after that it is deleted.
+ * A club unfollowed, or the rows switched off, takes its row off the home screen at once (deleted: an emptied row
+ * stayed as "This channel is empty" for up to 7 days); following again or switching back on creates it anew, with the
+ * system's add-row prompt. Only while another home screen is the default are rows emptied and kept for 7 days
+ * (rowFate), so a switch back to the Android TV home finds them in place.
  */
 final class HomeRows {
     static final String ART = "v3";  // logo art version: a new value makes the launcher reload the row logos
@@ -124,6 +126,26 @@ final class HomeRows {
         catch (Exception ignored) { }
     }
 
+    /** What becomes of a club's row: kept, emptied and kept for KEEP_HIDDEN (hide), or deleted now. */
+    enum Fate { KEEP, HIDE, REMOVE }
+
+    /**
+     * A club row's fate: a club no longer followed loses its row at once, and so does every row when the viewer
+     * switches rows off; while the classic home screen isn't the default (supported false) a followed club's row is
+     * only emptied (hide), as it can't be seen anyway and a switch back restores it. A followed club with rows on and
+     * shown keeps its row: an upgrade, a refresh or a language change never deletes it. Pure: unit-tested.
+     */
+    static Fate rowFate(String club, Set<String> followed, boolean supported, boolean rowsOn) {
+        if (club == null || !followed.contains(club)) return Fate.REMOVE;
+        if (!rowsOn) return Fate.REMOVE;
+        return supported ? Fate.KEEP : Fate.HIDE;
+    }
+
+    /** Rows switched on in Settings (whatever the home screen). */
+    static boolean rowsOn(Context c) {
+        return c.getSharedPreferences("settings", Context.MODE_PRIVATE).getBoolean("rows", true);
+    }
+
     /** Empties a row and remembers when; it is deleted only after KEEP_HIDDEN. */
     static synchronized void hide(Context c, String key) {
         SharedPreferences sp = c.getSharedPreferences("row", Context.MODE_PRIVATE);
@@ -149,11 +171,14 @@ final class HomeRows {
     }
 
     /**
-     * Hides the rows of clubs that are no longer followed (reads the follow list itself, under the same lock as channel(),
-     * so a row created a moment ago for a new follow is never touched). Also finds club rows the settings lost track of.
+     * Deletes the rows of clubs that are no longer followed, and every row when rows are switched off; empties them
+     * (hide) while another home screen is the default (rowFate). Reads the follow list itself, under the same lock as
+     * channel(), so a row created a moment ago for a new follow is never touched. Also deletes club rows the settings
+     * lost track of (orphans) unless their club keeps its row.
      */
     static synchronized void removeUnfollowed(Context c) {
-        Set<String> follow = enabled(c) ? Teams.followed(c) : java.util.Collections.<String>emptySet();
+        Set<String> follow = Teams.followed(c);
+        boolean supported = supported(c), on = rowsOn(c);
         SharedPreferences sp = c.getSharedPreferences("row", Context.MODE_PRIVATE);
         Map<String, Long> rows = new HashMap<>();
         for (Map.Entry<String, ?> e : sp.getAll().entrySet())
@@ -162,7 +187,7 @@ final class HomeRows {
                 TvContract.Channels.COLUMN_INTERNAL_PROVIDER_ID}, null, null, null)) {
             while (q != null && q.moveToNext()) {
                 String key = q.getString(1);
-                if (clubOf(key) == null || follow.contains(clubOf(key))) continue;
+                if (clubOf(key) == null || rowFate(clubOf(key), follow, supported, on) == Fate.KEEP) continue;
                 if (!rows.containsKey(key) || rows.get(key) != q.getLong(0)) {  // not ours in the settings: an orphan
                     try { c.getContentResolver().delete(TvContract.buildChannelUri(q.getLong(0)), null, null); } catch (Exception ignored) { }
                 }
@@ -170,10 +195,14 @@ final class HomeRows {
         } catch (Exception ignored) { }
         for (String key : rows.keySet()) {
             String club = clubOf(key);
-            if (follow.contains(club)) continue;
-            boolean first = sp.getLong("hidden_" + key, 0) == 0;
-            hide(c, key);
-            if (first && !Teams.followed(c).contains(club)) Store.forgetClub(c, club);  // cards, guide cache, timestamps
+            switch (rowFate(club, follow, supported, on)) {
+                case KEEP: break;
+                case HIDE: hide(c, key); break;
+                default:
+                    removeChannel(c, key);
+                    // a club unfollowed (still, not followed again meanwhile): its cards, guide cache and timestamps go too
+                    if (!follow.contains(club) && !Teams.followed(c).contains(club)) Store.forgetClub(c, club);
+            }
         }
     }
 

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The window behind every Fanela screen until its first frame (SPEC-APP 3.4): the app's near-black with the Fanela
+     shirt centred, in the off-white ink at 85 % (the masthead's mark, larger), no words. On Android 12+ the system's
+     splash screen shows the same mark at the same place (splash_mark, values-v31), so the hand-over never moves. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/bg" />
+    <item android:drawable="@drawable/splash_mark" />
+</layer-list>

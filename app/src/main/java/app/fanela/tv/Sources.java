@@ -338,8 +338,8 @@ final class Sources {
                     m.home = lc.optString("abbreviatedName", lc.optString("name")).trim();
                     m.away = rc.optString("abbreviatedName", rc.optString("name")).trim();
                     JSONObject li = lc.optJSONObject("images"), ri = rc.optJSONObject("images");
-                    m.homeCrest = li == null ? "" : li.optString("crest", "");
-                    m.awayCrest = ri == null ? "" : ri.optString("crest", "");
+                    m.homeCrest = Teams.clubCrest(lc.optString("code"), null, li == null ? "" : li.optString("crest", ""));
+                    m.awayCrest = Teams.clubCrest(rc.optString("code"), null, ri == null ? "" : ri.optString("crest", ""));
                     if (g.optBoolean("played")) {
                         m.state = "post";
                         m.hs = String.valueOf(g.getJSONObject("local").optInt("score"));
@@ -466,8 +466,8 @@ final class Sources {
         m.clubIsHome = tid.equals(e.optString("idHomeTeam"));
         m.home = e.optString("strHomeTeam");
         m.away = e.optString("strAwayTeam");
-        m.homeCrest = e.optString("strHomeTeamBadge", "");
-        m.awayCrest = e.optString("strAwayTeamBadge", "");
+        m.homeCrest = Teams.clubCrest(null, e.optString("idHomeTeam"), e.optString("strHomeTeamBadge", ""));
+        m.awayCrest = Teams.clubCrest(null, e.optString("idAwayTeam"), e.optString("strAwayTeamBadge", ""));
         String h = e.optString("intHomeScore", ""), a = e.optString("intAwayScore", ""), status = e.optString("strStatus", "");
         boolean scored = !h.isEmpty() && !"null".equals(h) && !a.isEmpty() && !"null".equals(a);
         boolean finished = "FT".equals(status) || "AOT".equals(status) || "AP".equals(status)

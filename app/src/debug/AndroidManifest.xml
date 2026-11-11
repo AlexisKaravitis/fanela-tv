@@ -10,6 +10,7 @@
             <intent-filter>
                 <action android:name="app.fanela.tv.DEMO" />
                 <action android:name="app.fanela.tv.REFRESH" />
+                <action android:name="app.fanela.tv.SCENARIO" />
                 <action android:name="app.fanela.tv.AUDIT" />
                 <action android:name="app.fanela.tv.FOLLOW" />
                 <action android:name="app.fanela.tv.TVGUIDE" />

@@ -46,7 +46,14 @@ final class Match {
     String opponentRaw() { return clubHome() ? away : home; }
     boolean hasScore() { return hs != null && as != null && !hs.isEmpty() && !as.isEmpty() && !"null".equals(hs); }
 
-    String title() { return I18n.team(home) + " – " + I18n.team(away); }
+    /**
+     * "Olympiacos vs Dubai", "Ολυμπιακός vs Ντουμπάι": the launcher's title and the spoken description. "vs" in both
+     * languages, as the VS mark on the cards and in the app (owner, fx6); a score keeps its dash (scoreLine).
+     */
+    String title() { return I18n.team(home) + " " + VS + " " + I18n.team(away); }
+
+    /** Between two clubs in running text. */
+    static final String VS = "vs";
     String scoreLine() {
         if (!hasScore()) return title();
         return I18n.team(home) + " " + hs + "–" + as + " " + I18n.team(away) + (pens != null ? " (" + I18n.t("pens") + " " + pens + ")" : "");

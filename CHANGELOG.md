@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.2.0 (11 November 2026)
+
+A redesign of the cards on the TV's home screen and of the app itself. Updating keeps every setting.
+
+**Cards on the home screen**
+- Five card styles to choose from in Settings > Appearance: Signature (the new default, in your club's colours with
+  its crest as a large watermark), Clean (calm and minimal), Kit (your club's shirt, stripes included), Ticket
+  (a match ticket with the channel on the stub) and Clash (both clubs' kit colours meeting on a diagonal).
+- Every style is built for reading across the room: the same big kick-off time, TODAY and TOMORROW instead of dates
+  when the match is near, a red LIVE pill with the clock, and WIN, DRAW or LOSS after the final whistle.
+- Calmer cards: fewer things on each, lined up and kept clear of the edges, sized for how small the TV really draws
+  them.
+- VS between the two clubs in the app, in the titles the TV shows and on the Signature, Kit and Ticket cards.
+  Signature and Kit, which name only the opponent, write @ for an away game.
+- Basketball games show the clubs' own crests (Olympiacos, not the Olympiacos Basketball shield), and the Olympiacos
+  crest is drawn as the club prints it, white inside the red.
+- Each club's row has its own Fanela shirt logo in the club's colours. The row of a club you stop following is
+  removed at once.
+- A switch to hide scores, for matches you'll watch later. It hides them on the cards and in the titles the TV shows.
+- Honest words for unusual matches: awaiting a time, delayed, suspended, abandoned or postponed.
+
+**The app**
+- Two layouts to choose from: Club, built around your favourite club with its next match, latest result and fixtures,
+  and Matchday, rows of cards with a large stage for the one you're on.
+- A new match screen: where to watch it, your club's last five results in the competition and the return leg.
+- Live matches update in place, without the screen jumping or losing your place.
+- Settings > Appearance: live previews of the five card styles drawn with your next match, the app layout (Club or
+  Matchday) and the scores switch.
+- Redesigned Settings, a clearer country list and a first start in the same design.
+- The app opens on the Fanela shirt, then your favourite club's colours. Clubs in white kits get a dark field
+  instead of a light one.
+- Greek always uses 24-hour time.
+- Screen readers name the club on a row with nothing to show.
+- Back works the same on every Android TV, from Android 8 to 14.
+- Roboto Condensed for numbers and names (Apache License 2.0, in Sources and credits).
+
 ## 1.1.2 (11 November 2026)
 
 - The match screen has room for longer names. Its lines break between the teams or after a "·", never inside a

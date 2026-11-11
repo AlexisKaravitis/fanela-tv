@@ -45,4 +45,22 @@ public class BrandTest {
         }
         assertEquals("one launcher entry only in the manifest is on", 1, manifest.split("android:enabled=\"true\"", -1).length - 1);
     }
+
+    /** FB-3: each club's row logo wears that club's painted kit, its trim always showing. */
+    @Test public void eachRowLogoWearsItsClubsKit() {
+        ClubTokens oly = ClubTokens.of("435", 0xFFD0102E, 0xFFFFFFFF, null), paok = ClubTokens.of("605", 0xFF111111, 0xFFFFFFFF, null);
+        assertEquals(oly.kitA, Brand.rowShirt(oly)[0]);
+        assertEquals(oly.kitB, Brand.rowShirt(oly)[1]);
+        assertEquals(paok.kitA, Brand.rowShirt(paok)[0]);
+        assertTrue("different clubs, different logos", !Brand.rowLogoTag(oly).equals(Brand.rowLogoTag(paok)));
+        ClubTokens solid = ClubTokens.of("1", 0xFF1E3A8A, 0xFF1E3A8A, null);  // a one-colour kit: a trim that shows
+        assertTrue(ClubTokens.contrast(Brand.rowShirt(solid)[0], Brand.rowShirt(solid)[1]) > 3);
+    }
+
+    @Test public void theAppKeepsFanelasOwnIcon() throws Exception {
+        File res = new File("src/main/res");
+        if (!res.exists()) res = new File("app/src/main/res");
+        String manifest = new String(Files.readAllBytes(new File(res.getParentFile(), "AndroidManifest.xml").toPath()), StandardCharsets.UTF_8);
+        assertTrue("one Fanela: the original icon", manifest.contains("android:icon=\"@mipmap/ic_launcher\""));
+    }
 }

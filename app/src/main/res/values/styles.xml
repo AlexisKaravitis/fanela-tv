@@ -4,9 +4,14 @@
     <style name="Fanela" parent="@android:style/Theme.Material.NoActionBar.Fullscreen">
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:colorAccent">#3DDC84</item>
-        <item name="android:colorPrimary">#111318</item>
-        <item name="android:colorPrimaryDark">#111318</item>
+        <item name="android:colorPrimary">@color/bg</item>
+        <item name="android:colorPrimaryDark">@color/bg</item>
         <item name="android:windowAnimationStyle">@android:style/Animation.Activity</item>
     </style>
-    <color name="bg">#111318</color>
+    <!-- The main screen: branded until it draws (launch.xml: the shirt on near-black, SPEC-APP 3.4) -->
+    <style name="Fanela.Launch">
+        <item name="android:windowBackground">@drawable/launch</item>
+    </style>
+    <!-- The app background (SPEC-APP 1.2 bg, Ui.APP_BG): near-black, never #000 -->
+    <color name="bg">#0B0B0D</color>
 </resources>

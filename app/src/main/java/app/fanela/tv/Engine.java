@@ -63,6 +63,7 @@ final class Engine {
         }
         List<Match> all;
         try {
+            followedCrests(c);  // the rail's crests before any feed (only those missing: a file check each)
             boolean first = true;
             do {  // a settings change during the pass, the drawing or the scheduling triggers one more round
                 again.set(false);
@@ -134,10 +135,11 @@ final class Engine {
         List<List<Match>> founds = new ArrayList<>();
         for (String id : due) {  // network, outside every lock
             if (stop.set) break;
-            Teams.Club k = Teams.get(c, id);
+            // the same lookup as the home screen (HomeActivity.model): a club it shows is always fetched
+            Teams.Club k = Teams.find(c, id);
             if (k == null) continue;
             try {
-                if (basket) { Teams.resolveEuro(c, k); Teams.lookupBasket(c, k); k = Teams.get(c, id); if (k == null) continue; }
+                if (basket) { Teams.resolveEuro(c, k); Teams.lookupBasket(c, k); k = Teams.find(c, id); if (k == null) continue; }
                 boolean askResults = force || resign.contains(id) || resultsDue(cached, id, sp.getLong("res_" + id, 0), now);
                 List<Sources.Result> rs = Sources.fetch(c, k, basket, cached, askResults);
                 List<Match> known = new ArrayList<>(cached);
@@ -180,13 +182,16 @@ final class Engine {
         }
         st.commit();
         SharedPreferences.Editor ed = sp.edit();
+        boolean answered = false;
         for (int i = 0; i < clubs.size(); i++) {  // only clubs whose feeds answered (offline: retry on the next job)
             boolean ok = false;
             boolean res = false;
             for (Sources.Result r : results.get(i)) { ok |= r.ok; res |= r.results; }
             if (ok) ed.putLong("lastFull_" + clubs.get(i).id, now).putString("sig_" + clubs.get(i).id, sig(basket, country));
             if (res) ed.putLong("res_" + clubs.get(i).id, now);
+            answered |= ok;
         }
+        if (!answered && !stop.set) ed.putLong("failedAt", System.currentTimeMillis());  // asked, and nothing answered
         if (sp.getLong("cleaned", 0) < now - 7 * 86400000L) { Net.cleanImages(c); ed.putLong("cleaned", now); }
         ed.apply();
         if (!stop.set) prefetchImages(c, Store.load(c), follow);
@@ -351,17 +356,44 @@ final class Engine {
         }
     }
 
+    /**
+     * The followed clubs' own crests (the Club rail, Matchday's row labels), downloaded first: they are on the TV from
+     * the moment a club is followed (Teams.setFollowed asks too), so the rail never shows a placeholder for long.
+     */
+    static void followedCrests(Context c) {
+        for (String id : Teams.followed(c)) {
+            Teams.Club k = Teams.find(c, id);
+            if (k != null && k.crest != null) Net.fetchImage(c, k.crest);
+        }
+    }
+
+    /**
+     * The images the screens draw, downloaded ahead of drawing: every crest of every saved match (QA3G-1: the fixtures
+     * list, the latest results and the match screen's form reach past a month, and a crest missing there stays a
+     * monogram), the nearest matches first; the channel logos of the coming month's matches; the followed clubs' crests.
+     * A crest already on the TV costs a file check.
+     */
     static void prefetchImages(Context c, List<Match> all, Set<String> follow) {
-        long now = System.currentTimeMillis();
+        final long now = System.currentTimeMillis();
+        List<Match> near = new ArrayList<>(all);
+        Collections.sort(near, new Comparator<Match>() {
+            public int compare(Match a, Match b) { return Long.compare(Math.abs(a.start - now), Math.abs(b.start - now)); }
+        });
         Set<String> done = new HashSet<>();
-        for (Match m : all) {
-            if (m.start < now - 30L * 86400000L || m.start > now + 30L * 86400000L) continue;
+        for (Match m : near) {
             for (String u : new String[]{m.homeCrest, m.awayCrest}) if (u != null && done.add(u)) Net.fetchImage(c, u);
-            if (m.start > now - 6 * 3600000L)  // channel logos of upcoming matches
+            if (m.start > now - 6 * 3600000L && m.start < now + 30L * 86400000L)  // channel logos of upcoming matches
                 for (Channels.Logo l : Channels.logos(c, m)) if (done.add(l.url)) Net.fetchImage(c, l.url);
         }
-        for (String id : follow) { Teams.Club k = Teams.get(c, id); if (k != null) Net.fetchImage(c, k.crest); }
+        for (String id : follow) { Teams.Club k = Teams.find(c, id); if (k != null) Net.fetchImage(c, k.crest); }
     }
+
+    /**
+     * When a refresh last found no feed answering for any club it asked about (0: never): the home screen's offline
+     * line shows only when this is later than the last success (HomeModel.offline), not because Android has not
+     * validated the network (a blocked captive-portal check while downloads work, QA3G-3).
+     */
+    static long failedAt(Context c) { return c.getSharedPreferences("engine", Context.MODE_PRIVATE).getLong("failedAt", 0); }
 
     static void shareCrests(List<Match> all) {
         Map<String, String> crest = new HashMap<>();

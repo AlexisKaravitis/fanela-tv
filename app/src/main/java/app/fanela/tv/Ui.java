@@ -8,8 +8,97 @@ import android.util.TypedValue;
 import android.view.View;
 import android.widget.TextView;
 
-/** Shared look for the app's screens: 10-foot type sizes, colours, rounded surfaces and the focus treatment. */
+/**
+ * Shared look for the app's screens. The 1.2 design system (SPEC-APP 1) comes first: colour roles, type scale,
+ * spacing, radii, focus and motion, all in spec px on the 1920x1080 canvas (scale() turns them into screen px, so the
+ * screen never follows the system font size). The 1.1 tokens below it still dress Settings until it is redesigned.
+ */
 final class Ui {
+    // ---------- 1.2 design system: colour roles ----------
+    static final int APP_BG = FieldColors.BG, S1 = 0xFF151619, S2 = 0xFF1E1F24, S3 = 0xFF292B31;
+    /** Text: never pure white. TXT2 / TXT3 are its 72 % and 50 % opacities. */
+    static final int TXT = 0xFFF1F1F1;
+    static final float A2 = 0.72f, A3 = 0.5f;
+    /** Row dividers (only on a dark surface, never as an outline); tonal fills of tiles and the where-to-watch cell. */
+    static final int STROKE = 0x1AFFFFFF, TONAL = 0x12FFFFFF, TONAL_HI = 0x24FFFFFF;
+    static final int LIVE = 0xFFE8102A, LIVE_TEXT = 0xFFFF5C5C;
+    /** Outcome pills: the cards' own colours (CardKit), so the app and the home screen say WIN / DRAW / LOSS alike. */
+    static final int WIN = CardKit.WIN, DRAW = CardKit.DRAW, LOSS = CardKit.LOSS, LOSS_TEXT = CardKit.LOSS_TEXT;
+
+    // ---------- type scale (px) ----------
+    static final float T_DISPLAY_XL = 224, T_DISPLAY = 200, T_SCORE_L = 190, T_SCORE_STRIP = 150, T_TITLE = 80,
+        T_TITLE_MIN = 60, T_STRIP_NAME = 72, T_REL = 58, T_SCORE_M = 58, T_SCORE_S = 34, T_ROW_TIME = 34, T_BODY = 30,
+        T_META = 28, T_META_S = 26, T_EYEBROW = 26, T_LABEL = 24, T_MIN = 24;
+    /** Caps tracking: eyebrows and labels +14 %, LIKELY +12 %, outcome pills +6 %. */
+    static final float TRACK_EYEBROW = 0.14f, TRACK_LIKELY = 0.12f, TRACK_PILL = 0.06f;
+    /**
+     * Vertical metrics of the two faces as the reference renders lay them out (CSS line boxes): Google Sans uses its
+     * typo metrics, Roboto Condensed its Windows ones. Baselines computed from these land where the spec's do.
+     */
+    static final float GS_ASC = 0.966f, GS_DESC = 0.286f, RC_ASC = 1.048f, RC_DESC = 0.271f;
+
+    // ---------- spacing, radii ----------
+    static final float GRID = 8, SAFE_X = 96, SAFE_Y = 54, W = 1920, H = 1080;
+    static final float R_HERO = 28, R_TILE = 16, R_ROW = 12, R_CELL = 12, R_STRIP = 18;
+
+    // ---------- focus ----------
+    /** A 4 px ring outside the shape, a 10 px white 6 % glow, a 7.5 % tonal fill and one soft shadow. */
+    static final float RING = 4, GLOW = 10;
+    static final int RING_COLOR = TXT, GLOW_COLOR = 0x0FFFFFFF, FOCUS_FILL = 0x13FFFFFF;
+    static final float SCALE_CARD = 1.05f, SCALE_TILE = 1.04f;
+
+    // ---------- motion (ms) ----------
+    static final int FOCUS_MS = 150, SCROLL_MS = 200, SWITCH_MS = 300, SWAP_MS = 120, WATCH_MS = 160, PULSE_MS = 1200,
+        SCORE_MS = 180, FLASH_MS = 600, SKELETON_MS = 1200, PUSH_MS = 220;
+    static final float PUSH_RISE = 16;
+    static final android.view.animation.Interpolator FAST_OUT_SLOW_IN = new android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f);
+    static final android.view.animation.Interpolator DECELERATE = new android.view.animation.DecelerateInterpolator(1.5f);
+
+    /** Screen px per spec px: the canvas is 1920 wide whatever the TV's density. */
+    static float scale(Context c) {
+        android.util.DisplayMetrics m = c.getResources().getDisplayMetrics();
+        return Math.max(m.widthPixels, m.heightPixels) / W;
+    }
+
+    /** Spec px to screen px. */
+    static int px(Context c, float v) { return Math.round(v * scale(c)); }
+
+    /** A text paint in spec px: anti-aliased, tabular figures. */
+    static android.graphics.Paint paint(Typeface face, float size, int color) {
+        android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG | android.graphics.Paint.SUBPIXEL_TEXT_FLAG);
+        p.setTypeface(face);
+        p.setTextSize(size);
+        p.setColor(color);
+        p.setFontFeatureSettings("tnum");
+        return p;
+    }
+
+    static boolean condensed(Typeface f) { return f == COND || f == COND_BOLD; }
+
+    /** The baseline of one line centred on cy (a CSS line box of normal height, as in a flex row). */
+    static float baseline(Typeface face, float size, float cy) {
+        float a = condensed(face) ? RC_ASC : GS_ASC, d = condensed(face) ? RC_DESC : GS_DESC;
+        return cy - (a + d) * size / 2 + a * size;
+    }
+
+    /** The baseline of a line box starting at top with the given line height (lineHeight 0: normal). */
+    static float baselineTop(Typeface face, float size, float top, float lineHeight) {
+        float a = condensed(face) ? RC_ASC : GS_ASC, d = condensed(face) ? RC_DESC : GS_DESC;
+        float lh = lineHeight <= 0 ? (a + d) * size : lineHeight;
+        return top + (lh - (a + d) * size) / 2 + a * size;
+    }
+
+    /** The normal line height of a face at a size. */
+    static float lineHeight(Typeface face, float size) {
+        return (condensed(face) ? RC_ASC + RC_DESC : GS_ASC + GS_DESC) * size;
+    }
+
+    /** A colour at an opacity (0..1) of its own alpha. */
+    static int alpha(int color, float a) {
+        return (Math.round(((color >>> 24) & 0xFF) * a) << 24) | (color & 0xFFFFFF);
+    }
+
+    // ---------- 1.1 tokens (Settings, the match panel) ----------
     static final int BG = Color.rgb(17, 19, 24), SURFACE = Color.rgb(35, 38, 46);
     static final int TEXT = Color.WHITE, SUB = Color.rgb(166, 172, 184);
     /** Greece blue: the app's own colour until a club is followed. */
@@ -30,6 +119,9 @@ final class Ui {
     // ---------- type: Google Sans (SIL Open Font License, res/raw/ofl_google_sans.txt), as on Google TV ----------
     static volatile Typeface REGULAR = Typeface.DEFAULT, MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL),
         BOLD = Typeface.DEFAULT_BOLD;
+    /** Roboto Condensed (Apache 2.0, bundled so every TV draws the cards alike): names and numerals on the cards. */
+    static volatile Typeface COND = Typeface.create("sans-serif-condensed", Typeface.NORMAL),
+        COND_BOLD = Typeface.create("sans-serif-condensed", Typeface.BOLD);
     private static volatile boolean fontsLoaded;
 
     /** Loads the app's font once (any thread). Missing characters fall back to the system font. */
@@ -40,6 +132,8 @@ final class Ui {
             REGULAR = r.getFont(R.font.google_sans_regular);
             MEDIUM = r.getFont(R.font.google_sans_medium);
             BOLD = r.getFont(R.font.google_sans_bold);
+            COND = r.getFont(R.font.roboto_condensed_regular);
+            COND_BOLD = r.getFont(R.font.roboto_condensed_bold);
         } catch (Throwable ignored) { }  // the system font then
         fontsLoaded = true;
     }

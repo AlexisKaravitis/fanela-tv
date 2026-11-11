@@ -13,7 +13,7 @@ you see "Android TV OS", you're fine.
 ## Step 1: get the APK
 
 Open the [Releases page](https://github.com/AlexisKaravitis/fanela-tv/releases/latest) and download
-`fanela-1.1.2.apk` (about 700 KB) to your phone or computer.
+`fanela-1.2.0.apk` (about 1.2 MB) to your phone or computer.
 
 ## Step 2: allow installs from unknown sources
 
@@ -33,12 +33,12 @@ Pick whichever is easiest for you.
 
 1. Install **Send Files to TV** on your phone and on the TV (both from Google Play).
 2. Allow it to install apps on the TV, as in step 2.
-3. Open it on both devices, choose **Send** on the phone and pick `fanela-1.1.2.apk`.
+3. Open it on both devices, choose **Send** on the phone and pick `fanela-1.2.0.apk`.
 4. On the TV, open the file and choose **Install**, then **Open**.
 
 ### From a USB stick
 
-1. Copy `fanela-1.1.2.apk` to a USB stick and plug it into the TV.
+1. Copy `fanela-1.2.0.apk` to a USB stick and plug it into the TV.
 2. Open it with a file manager on the TV (for example **File Commander** or **X-plore** from Google Play) and choose
    **Install**.
 
@@ -48,7 +48,7 @@ No phone or computer needed. Install **Downloader** by AFTVnews from Google Play
 this link and press **Go**:
 
 ```
-github.com/AlexisKaravitis/fanela-tv/releases/latest/download/fanela-1.1.2.apk
+github.com/AlexisKaravitis/fanela-tv/releases/latest/download/fanela-1.2.0.apk
 ```
 
 When the download finishes, choose **Install**, then **Open**.
@@ -59,7 +59,7 @@ Turn on Developer options > USB debugging (or Network debugging) on the TV, then
 
 ```bash
 adb connect <TV IP address>:5555
-adb install fanela-1.1.2.apk
+adb install fanela-1.2.0.apk
 ```
 
 The TV shows a prompt the first time a computer connects. Choose **Allow**.
@@ -72,9 +72,11 @@ The TV shows a prompt the first time a computer connects. Choose **Allow**.
 3. Pick a league from the row above the clubs, then press **OK** on the clubs you follow, in as many leagues as you
    like. The first club you pick sets the app's colours until you choose a favourite club in Settings.
 4. On the classic Android TV home screen the TV asks to add each club's row: choose **Add**.
-5. Press **Done** (top right, or under the clubs). Your clubs' matches appear in a few seconds.
+5. Press **Done** at the top right, or **Skip** to choose your clubs later. Your clubs' matches appear in a few
+   seconds.
 
-The [tutorial](TUTORIAL.md) explains the cards, the match screen and Settings.
+The [tutorial](TUTORIAL.md) explains the two layouts, the cards, the match screen and Settings, including
+Settings > Appearance, where you choose a card style.
 
 ## Home-screen rows (Android TV only)
 
@@ -89,6 +91,9 @@ To remove the rows: Settings > Home-screen rows > Off. You can also hide one on 
 
 Download the new APK from the Releases page and install it the same way. Android replaces the old version and keeps
 your clubs and settings. Every release is signed with the same key, so you never need to uninstall first.
+
+Updating from 1.1: your clubs and settings stay. The cards take the new Signature style and the app opens in the Club
+layout; change either in Settings > Appearance.
 
 Updating from 1.0: your clubs, language, favourite club, rows and tile colour stay, and the country is set to Greece,
 so everything looks as before. Change it in Settings > Country if you're elsewhere.
