@@ -15,8 +15,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Keeps the followed clubs' matches up to date.
  *  refresh(): for every followed club that is due (15 min with a match within 48 h, hourly otherwise, 3 h with the
- *             screen off), fixtures + guides -> one merge -> home-screen rows (when used). A settings change made
- *             during a refresh is picked up by an immediate second pass.
+ *             screen off), fixtures + where-to-watch for the viewer's country (Where) -> one merge -> home-screen rows
+ *             (when used). A settings change made during a refresh is picked up by an immediate second pass.
  *  tick():    live scores, called every 30 s by the app's home screen while it is visible and a match is on.
  *             Never blocked by refresh(). Nothing polls in the background.
  * Everything runs at background CPU priority.
@@ -38,7 +38,9 @@ final class Engine {
     /** A refresh is running (Settings, the job or the home screen). */
     static boolean busy() { return refreshing.get(); }
 
-    static boolean liveSource(Match m) { return "espn".equals(m.source) || "el".equals(m.source) || "ec".equals(m.source); }
+    static boolean liveSource(Match m) {
+        return "espn".equals(m.source) || "el".equals(m.source) || "ec".equals(m.source) || "nba".equals(m.source);
+    }
 
     /** Event id without the club, so a match between two followed clubs is one event. */
     static String event(Match m) { return m.key.substring(m.key.indexOf('|') + 1); }
@@ -48,6 +50,7 @@ final class Engine {
         background();
         Net.init(c);
         I18n.load(c);
+        Where.load(c);
         if (force) Net.reset();
         if (!refreshing.compareAndSet(false, true)) {
             again.set(true);  // the running refresh does one more pass with the new settings
@@ -60,6 +63,7 @@ final class Engine {
             do {  // a settings change during the pass, the drawing or the scheduling triggers one more round
                 again.set(false);
                 I18n.load(c);
+                Where.load(c);
                 pass(c, force && first);
                 first = false;
                 all = draw(c);
@@ -75,6 +79,7 @@ final class Engine {
         long now = System.currentTimeMillis();
         final Set<String> follow = Teams.followed(c);
         boolean basket = Teams.basketball(c);
+        String country = Where.country();
         SharedPreferences sp = c.getSharedPreferences("engine", Context.MODE_PRIVATE);
         SharedPreferences.Editor e0 = sp.edit();  // a club followed again later must be due at once
         for (String key : sp.getAll().keySet())
@@ -88,9 +93,11 @@ final class Engine {
         // which clubs are due, oldest first (a new follow or a basketball switch makes a club due at once)
         final Map<String, Long> last = new HashMap<>();
         List<String> due = new ArrayList<>();
+        final java.util.Set<String> resign = new java.util.HashSet<>();  // clubs whose country (or basketball) setting changed
         for (String id : follow) {
-            String sig = basket + "";
+            String sig = sig(basket, country);
             boolean changed = !sig.equals(sp.getString("sig_" + id, null));
+            if (changed) resign.add(id);
             long l = sp.getLong("lastFull_" + id, 0);
             long interval = !on ? 3 * 3600000L : busy(cached, id, now) ? 15 * 60000L : 60 * 60000L;
             last.put(id, l);
@@ -100,12 +107,12 @@ final class Engine {
         Collections.sort(due, new Comparator<String>() { public int compare(String a, String b) { return Long.compare(last.get(a), last.get(b)); } });
 
         Teams.refresh(c);
-        Channels.refresh(c);
-        Channels.load(c);
-        List<Guide.Airing> s24 = Guide.sport24(c);
+        List<Watch> watch = Where.providers(c, country);
+        for (Watch w : watch) w.prepare(c);  // Greece: the MagentaTV line-up and the Sport24 guide, as before
+        GreeceProvider greece = Where.greece(watch);
         List<Teams.Club> clubs = new ArrayList<>();
         List<List<Sources.Result>> results = new ArrayList<>();
-        List<List<Guide.Airing>> mags = new ArrayList<>(), sofas = new ArrayList<>();
+        List<List<Object>> listings = new ArrayList<>();
         List<List<Match>> founds = new ArrayList<>();
         for (String id : due) {  // network, outside every lock
             if (stop) break;
@@ -116,10 +123,10 @@ final class Engine {
                 List<Sources.Result> rs = Sources.fetch(c, k, basket);
                 List<Match> known = new ArrayList<>(cached);
                 for (Sources.Result r : rs) known.addAll(r.list);
-                List<Guide.Airing> mag = Guide.magenta(c, k, known);
-                List<Guide.Airing> sofa = Sofa.airings(c, k, known, basket);
-                List<Match> found = s24.isEmpty() ? null : Guide.discover(known, s24, k, basket);
-                clubs.add(k); results.add(rs); mags.add(mag); sofas.add(sofa); founds.add(found);
+                List<Object> ls = new ArrayList<>();
+                for (Watch w : watch) ls.add(w.fetch(c, k, known, basket));
+                List<Match> found = greece == null ? null : greece.discover(known, k, basket);
+                clubs.add(k); results.add(rs); listings.add(ls); founds.add(found);
             } catch (Throwable ignored) { }  // one club's failure never stops the others
         }
         SharedPreferences.Editor st = c.getSharedPreferences("store", Context.MODE_PRIVATE).edit();
@@ -129,8 +136,16 @@ final class Engine {
                 Teams.Club k = clubs.get(i);
                 try {
                     all = Store.mergeInto(all, k.id, results.get(i), founds.get(i), st);
-                    Guide.apply(all, k, mags.get(i), s24, sofas.get(i));
-                    if (!basket || !k.hasBasket) {
+                    if (resign.contains(k.id))  // the country changed: no match keeps the old country's channel
+                        for (Match m : all) {
+                            if (!k.id.equals(m.club)) continue;
+                            if (Where.greek(country) && m.channelSure && "".equals(m.listedBy)) continue;  // a Greek guide's own listing
+                            Where.reguess(m);
+                        }
+                    for (int w = 0; w < watch.size(); w++) watch.get(w).apply(all, k, listings.get(i).get(w));
+                    if (!Where.greek(country))  // a kept match (found earlier in a Greek guide) still showing a Greek channel
+                        for (Match m : all) if (k.id.equals(m.club) && m.channelKnown && !Where.plain(m)) Where.guess(m);
+                    if (!k.shows("BC", basket)) {
                         List<Match> keep = new ArrayList<>();
                         for (Match m : all) if (!(k.id.equals(m.club) && "BC".equals(m.team))) keep.add(m);
                         all = keep;
@@ -149,12 +164,15 @@ final class Engine {
         for (int i = 0; i < clubs.size(); i++) {  // only clubs whose feeds answered (offline: retry on the next job)
             boolean ok = false;
             for (Sources.Result r : results.get(i)) ok |= r.ok;
-            if (ok) ed.putLong("lastFull_" + clubs.get(i).id, now).putString("sig_" + clubs.get(i).id, basket + "");
+            if (ok) ed.putLong("lastFull_" + clubs.get(i).id, now).putString("sig_" + clubs.get(i).id, sig(basket, country));
         }
         if (sp.getLong("cleaned", 0) < now - 7 * 86400000L) { Net.cleanImages(c); ed.putLong("cleaned", now); }
         ed.apply();
         prefetchImages(c, Store.load(c), follow);
     }
+
+    /** What a club's last fetch depended on: a change makes it due at once (Greece keeps the old value). */
+    static String sig(boolean basket, String country) { return Where.greek(country) ? basket + "" : basket + ":" + country; }
 
     static boolean busy(List<Match> all, String club, long now) {
         for (Match m : all)
@@ -188,7 +206,7 @@ final class Engine {
             Match n;
             if (fetched.containsKey(ev)) n = fetched.get(ev);
             else {
-                n = "espn".equals(m.source) ? Sources.espnLive(m) : Sources.euroLive(m);
+                n = "espn".equals(m.source) ? Sources.espnLive(m) : "nba".equals(m.source) ? Sources.nbaLive(m) : Sources.euroLive(m);
                 fetched.put(ev, n);
             }
             if (n == null) continue;
@@ -196,7 +214,8 @@ final class Engine {
             if (!m.club.equals(u.club)) u.clubIsHome = !u.clubIsHome;  // the other club's point of view
             if (u.clubWon != 9 && !m.club.equals(n.club)) u.clubWon = -u.clubWon;
             u.channel = m.channel; u.channelNo = m.channelNo; u.channelLogo = m.channelLogo; u.channelApp = m.channelApp;
-            u.channelSure = m.channelSure; u.channelKnown = m.channelKnown; u.source = m.source; u.key = m.key; u.club = m.club;
+            u.channelSure = m.channelSure; u.channelKnown = m.channelKnown; u.listedBy = m.listedBy;
+            u.source = m.source; u.key = m.key; u.club = m.club;
             if ("in".equals(u.state)) u.seenLiveAt = now;
             updates.add(u);
         }

@@ -10,17 +10,21 @@ android {
     compileSdk 36
 
     defaultConfig {
+        // The worldwide exploration: its own id, so it installs next to the real Fanela (app.fanela.tv) and never
+        // replaces it. The Java package (namespace) stays app.fanela.tv.
         applicationId 'app.fanela.tv'
         minSdk 26          // Android TV 8.0: first version with home-screen rows (preview channels)
         targetSdk 36
-        versionCode 5
-        versionName '1.0.4'
+        versionCode 7
+        versionName '1.1.0'
         resourceConfigurations += ['en', 'el']
         // Club crests and exact channels from the TV guides (both can be switched off for a stricter build).
         buildConfigField 'boolean', 'REMOTE_IMAGES', 'true'
         buildConfigField 'boolean', 'GUIDES', 'true'
         // GitHub "owner/repo" whose releases carry new APKs (in-app updates). Empty = no update checks.
         buildConfigField 'String', 'UPDATE_REPO', '""'
+        // Ronin Sport API key: never in a release (see the debug build type). Empty = off.
+        buildConfigField 'String', 'RONIN_KEY', '""'
     }
 
     buildFeatures { buildConfig true }
@@ -43,7 +47,12 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (ksFile.exists()) signingConfig signingConfigs.release
         }
-        debug { applicationIdSuffix '.debug' }
+        debug {
+            applicationIdSuffix '.debug'
+            // Ronin Sport API key for per-match channels outside Greece (keystore.properties "roninKey"); debug builds
+            // only, until the provider is finished and the key lives on a server instead of in the APK
+            buildConfigField 'String', 'RONIN_KEY', '"' + (ks['roninKey'] ?: '').replaceAll('[^A-Za-z0-9._-]', '') + '"'
+        }
     }
 
     compileOptions {

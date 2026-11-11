@@ -13,7 +13,7 @@ you see "Android TV OS", you're fine.
 ## Step 1: get the APK
 
 Open the [Releases page](https://github.com/AlexisKaravitis/fanela-tv/releases/latest) and download
-`fanela-1.0.4.apk` (about 700 KB) to your phone or computer.
+`fanela-1.1.0.apk` (about 700 KB) to your phone or computer.
 
 ## Step 2: allow installs from unknown sources
 
@@ -33,12 +33,12 @@ Pick whichever is easiest for you.
 
 1. Install **Send Files to TV** on your phone and on the TV (both from Google Play).
 2. Allow it to install apps on the TV, as in step 2.
-3. Open it on both devices, choose **Send** on the phone and pick `fanela-1.0.4.apk`.
+3. Open it on both devices, choose **Send** on the phone and pick `fanela-1.1.0.apk`.
 4. On the TV, open the file and choose **Install**, then **Open**.
 
 ### From a USB stick
 
-1. Copy `fanela-1.0.4.apk` to a USB stick and plug it into the TV.
+1. Copy `fanela-1.1.0.apk` to a USB stick and plug it into the TV.
 2. Open it with a file manager on the TV (for example **File Commander** or **X-plore** from Google Play) and choose
    **Install**.
 
@@ -48,7 +48,7 @@ No phone or computer needed. Install **Downloader** by AFTVnews from Google Play
 this link and press **Go**:
 
 ```
-github.com/AlexisKaravitis/fanela-tv/releases/latest/download/fanela-1.0.4.apk
+github.com/AlexisKaravitis/fanela-tv/releases/latest/download/fanela-1.1.0.apk
 ```
 
 When the download finishes, choose **Install**, then **Open**.
@@ -59,7 +59,7 @@ Turn on Developer options > USB debugging (or Network debugging) on the TV, then
 
 ```bash
 adb connect <TV IP address>:5555
-adb install fanela-1.0.4.apk
+adb install fanela-1.1.0.apk
 ```
 
 The TV shows a prompt the first time a computer connects. Choose **Allow**.
@@ -67,10 +67,12 @@ The TV shows a prompt the first time a computer connects. Choose **Allow**.
 ## First start
 
 1. Choose **English** or **Ελληνικά**.
-2. Press **OK** on the clubs you follow. The first club you pick sets the app's colours until you choose a favourite
-   team in Settings.
-3. On the classic Android TV home screen the TV asks to add each club's row: choose **Add**.
-4. Press **Done**. Your clubs' matches appear in a few seconds.
+2. Check the **Country**. It starts as the TV's own and decides where-to-watch: in Greece the exact channel, elsewhere
+   the channels that hold each competition's rights there.
+3. Pick a league from the row above the clubs, then press **OK** on the clubs you follow, in as many leagues as you
+   like. The first club you pick sets the app's colours until you choose a favourite club in Settings.
+4. On the classic Android TV home screen the TV asks to add each club's row: choose **Add**.
+5. Press **Done** (top right, or under the clubs). Your clubs' matches appear in a few seconds.
 
 The [tutorial](TUTORIAL.md) explains the cards, the match screen and Settings.
 
@@ -88,6 +90,9 @@ To remove the rows: Settings > Home-screen rows > Off. You can also hide one on 
 Download the new APK from the Releases page and install it the same way. Android replaces the old version and keeps
 your clubs and settings. Every release is signed with the same key, so you never need to uninstall first.
 
+Updating from 1.0: your clubs, language, favourite club, rows and tile colour stay, and the country is set to Greece,
+so everything looks as before. Change it in Settings > Country if you're elsewhere.
+
 ## If something isn't right
 
 | What you see | What to do |
@@ -97,6 +102,9 @@ your clubs and settings. Every release is signed with the same key, so you never
 | The app's tile on the TV is still in the old colours | The TV draws app tiles when its home screen starts. Restart the TV, or wait for it to refresh. |
 | A match time or channel looks wrong | Times and channels can change late, especially for Greek Cup and basketball games. Check your provider's guide; Fanela catches up within 15 minutes. |
 | "Likely" under a match | No TV guide has listed the game yet, so Fanela shows the channel that holds the home team's TV rights. |
+| "Usually on ..." under a match | Outside Greece Fanela shows who holds the competition's rights in your country this season, not the exact channel for one match. Check your provider's guide. |
+| "Check your provider's guide" under a match | Fanela has no official list of that competition's TV partners for your country. |
+| The wrong channels for where you live | Settings > Country. |
 | No basketball games | Settings > Basketball must be On. Not every club has a basketball team that Fanela can follow. |
 | A row disappeared from the home screen | Settings > Home-screen rows lists it as "not on the home screen" with an **Add** button. Or use Home > Customise channels. |
 | "Get Magenta TV" instead of "Open Magenta TV" | The Magenta TV (or SPORT FM TV) app isn't on this TV. The button opens it on Google Play. |

@@ -101,7 +101,7 @@ final class Store {
             && (fresh.tbd ? sameAthensDay(old.start, fresh.start) : Math.abs(old.start - fresh.start) <= 90 * 60000L)) {
             fresh.start = old.start; fresh.tbd = false;
             fresh.channel = old.channel; fresh.channelNo = old.channelNo; fresh.channelLogo = old.channelLogo;
-            fresh.channelApp = old.channelApp; fresh.channelSure = true; fresh.channelKnown = true;
+            fresh.channelApp = old.channelApp; fresh.channelSure = true; fresh.channelKnown = true; fresh.listedBy = old.listedBy;
         }
         if (old.seenLiveAt > fresh.seenLiveAt) fresh.seenLiveAt = old.seenLiveAt;
         return fresh;
@@ -110,6 +110,13 @@ final class Store {
     static boolean sameAthensDay(long a, long b) {
         java.text.SimpleDateFormat d = new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US);
         d.setTimeZone(java.util.TimeZone.getTimeZone("Europe/Athens"));
+        return d.format(new java.util.Date(a)).equals(d.format(new java.util.Date(b)));
+    }
+
+    /** The same calendar day where the viewer is: Athens in Greece (as Fanela), the TV's own time zone elsewhere. */
+    static boolean sameViewerDay(long a, long b) {
+        if (Where.greek(Where.country())) return sameAthensDay(a, b);
+        java.text.SimpleDateFormat d = new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US);
         return d.format(new java.util.Date(a)).equals(d.format(new java.util.Date(b)));
     }
 
@@ -138,7 +145,7 @@ final class Store {
 
     static long lastUpdate(Context c, String club, String team) {
         return "FC".equals(team) ? lastOk(c, "espn", club)
-            : Math.max(Math.max(lastOk(c, "el", club), lastOk(c, "ec", club)), lastOk(c, "tsdb", club));
+            : Math.max(Math.max(Math.max(lastOk(c, "el", club), lastOk(c, "ec", club)), lastOk(c, "tsdb", club)), lastOk(c, "nba", club));
     }
 
     /** True when the club's main feed for this sport has not answered for 6 hours. */
@@ -170,6 +177,7 @@ final class Store {
                 o.put("channel", m.channel); o.put("channelApp", m.channelApp); o.put("channelNo", m.channelNo);
                 o.put("channelLogo", m.channelLogo); o.put("channelSure", m.channelSure); o.put("channelKnown", m.channelKnown);
                 o.put("seenLiveAt", m.seenLiveAt);
+                if (Where.plain(m)) o.put("listedBy", m.listedBy);
                 a.put(o);
             }
             writeAtomic(new File(c.getFilesDir(), "matches4.json"), a.toString());  // v4 format (v3 file is ignored)
@@ -196,7 +204,9 @@ final class Store {
                     m.tbd = o.optBoolean("tbd"); m.quarter = o.optInt("quarter"); m.clubWon = o.optInt("clubWon", 9);
                     m.pens = o.isNull("pens") ? null : o.optString("pens", null);
                     m.homeCrest = o.optString("homeCrest"); m.awayCrest = o.optString("awayCrest");
-                    m.channel = o.optString("channel"); m.channelApp = o.optString("channelApp", Cards.MAGENTA);
+                    m.listedBy = o.optString("listedBy", "");
+                    m.channel = o.optString("channel");
+                    m.channelApp = o.has("channelApp") ? o.optString("channelApp") : Where.plain(m) ? null : Cards.MAGENTA;
                     m.channelNo = o.optInt("channelNo"); m.channelLogo = o.isNull("channelLogo") ? null : o.optString("channelLogo", null);
                     m.channelSure = o.optBoolean("channelSure"); m.channelKnown = o.optBoolean("channelKnown", true);
                     m.seenLiveAt = o.optLong("seenLiveAt");

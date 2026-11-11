@@ -269,15 +269,15 @@ final class Guide {
             Airing s = a == null && b == null && sofa != null ? Sofa.find(sofa, m) : null;  // SofaScore: only when no guide lists it
             if (a != null) {
                 m.channel = a.channel; m.channelNo = a.number; m.channelLogo = a.logo;
-                m.channelApp = Cards.MAGENTA; m.channelSure = true; m.channelKnown = true;
+                m.channelApp = Cards.MAGENTA; m.channelSure = true; m.channelKnown = true; m.listedBy = "";
             } else if (b != null) {
                 m.channel = simulcast(sp, b, m, clubGr); m.channelNo = Channels.numberCached(m.channel); m.channelLogo = null;
                 m.channelApp = app(m.channel);
-                m.channelSure = true; m.channelKnown = true;
+                m.channelSure = true; m.channelKnown = true; m.listedBy = "";
             } else if (s != null) {
                 m.channel = s.channel; m.channelNo = Channels.numberCached(s.channel); m.channelLogo = null;
                 m.channelApp = app(m.channel);
-                m.channelSure = true; m.channelKnown = true;
+                m.channelSure = true; m.channelKnown = true; m.listedBy = "";
             }
             boolean weakTime = "tsdb".equals(m.source) || "s24".equals(m.source);
             if (b != null && "pre".equals(m.state) && (m.tbd || (weakTime && Math.abs(b.start - m.start) <= 90 * 60000L))) {

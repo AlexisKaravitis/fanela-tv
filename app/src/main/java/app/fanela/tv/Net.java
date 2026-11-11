@@ -62,6 +62,11 @@ final class Net {
         return new String(bytes(url, 3 << 20, false), "UTF-8");
     }
 
+    /** With one extra request header (an API key). */
+    static String http(String url, String header, String value) throws IOException {
+        return new String(bytes(url, 3 << 20, false, header, value), "UTF-8");
+    }
+
     /** Live score polls: never skipped by backoff and never cause it (a goal must not wait for a timer). */
     static String httpLive(String url) throws IOException {
         return new String(bytes(url, 3 << 20, true), "UTF-8");
@@ -69,7 +74,9 @@ final class Net {
 
     static byte[] bytes(String url, int cap) throws IOException { return bytes(url, cap, false); }
 
-    static byte[] bytes(String url, int cap, boolean live) throws IOException {
+    static byte[] bytes(String url, int cap, boolean live) throws IOException { return bytes(url, cap, live, null, null); }
+
+    static byte[] bytes(String url, int cap, boolean live, String header, String value) throws IOException {
         URL u = new URL(url);
         String host = live ? "" : u.getHost();
         if (!live && blocked(host)) throw new Backoff(host);
@@ -81,6 +88,7 @@ final class Net {
             c.setInstanceFollowRedirects(true);
             c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android TV) Fanela/" + BuildConfig.VERSION_NAME);
             c.setRequestProperty("Accept", "application/json, image/*;q=0.9, */*;q=0.5");
+            if (header != null && value != null) c.setRequestProperty(header, value);
             int code = c.getResponseCode();
             if (!"https".equals(c.getURL().getProtocol()) && url.startsWith("https")) throw new IOException("downgrade");
             if (code == 403 || code == 429 || code >= 500) { if (!live) result(host, false); throw new IOException("HTTP " + code); }

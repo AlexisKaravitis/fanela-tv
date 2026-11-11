@@ -1,13 +1,11 @@
 # Working on Fanela
 
-How to get the code, make a change on a branch, test it on a TV or emulator, and get it back into the repository.
+How to get the code, make a change, test it on a TV or emulator, and get it back into the repository.
 
 ## Getting the code
 
 Anyone can clone the repository and build it. To push changes you need write access; otherwise fork it and open a
 pull request.
-
-**Command line**
 
 ```bash
 git clone https://github.com/AlexisKaravitis/fanela-tv.git
@@ -15,22 +13,15 @@ cd fanela-tv
 ```
 
 The first push or pull asks you to sign in to GitHub in the browser. Git for Windows remembers the login afterwards.
-
-**GitHub Desktop**
-
-File > Clone repository > GitHub.com, pick `AlexisKaravitis/fanela-tv` and choose a folder. Branches, commits and pushes
-are all buttons in the app.
-
-**Android Studio**
-
-File > Open and select the `fanela-tv` folder (the one with `settings.gradle`). Android Studio sets up Gradle on its own.
-You can also clone straight from Android Studio: File > New > Project from Version Control.
+In GitHub Desktop or Android Studio, clone `AlexisKaravitis/fanela-tv`.
 
 ## Branches
 
-`main` is what is released. Do new work on a branch of its own and merge it when it's ready.
+| Branch | Purpose |
+|---|---|
+| `main` | What is released. Only changes that are ready go here. |
 
-Every release has a tag (`v1.0.4`, ...). `git checkout v1.0.4` gives you exactly the code of that release.
+Every release has a tag (`v1.0.4`, `v1.1.0`, ...). `git checkout v1.1.0` gives you exactly the code of that release.
 
 Do new work on its own branch, so `main` always matches the released app:
 
@@ -40,13 +31,7 @@ git pull
 git switch -c fix-kickoff-times
 ```
 
-To carry on with an existing branch:
-
-```bash
-git fetch
-git switch fix-kickoff-times
-git pull
-```
+When you're done, open a pull request into `main`.
 
 ## Making a change
 
@@ -62,10 +47,6 @@ git pull
    git commit -m "Show the referee in the match panel"
    git push -u origin fix-kickoff-times
    ```
-5. On GitHub, open a pull request from your branch into `main`, look over the changes and merge it.
-
-Small edits to the documentation can be made on github.com directly: open the file, press the pencil icon, and
-commit to a new branch.
 
 Commit messages describe what changes for the person using the app, in one line, for example "Keep NBA games that
 have no winner yet".
@@ -83,59 +64,99 @@ You need JDK 17 and the Android SDK with platform 36 (Android Studio installs bo
   and install the same APK. Use the classic Android TV image if you want to see the home-screen rows.
 
 The debug build's package is `app.fanela.tv.debug`, so it installs next to the released app and doesn't touch your
-real clubs or settings. The app's name and icon are the same, so check which one you open.
+real clubs or settings.
+
+To see the app as a viewer elsewhere would, change Settings > Country. Settings > Language switches English and
+Greek.
 
 ### Debug tools
 
 Debug builds have a receiver for checks you'd otherwise do by hand:
 
 ```bash
-# render every card state for one club and pull the images
-sh tools/demo_all.sh <device> out en el
+# render every card state for one club and pull the images; COUNTRY draws them as seen from there
+COUNTRY=GB CLUBS="359 382" sh tools/demo_all.sh <device> out en
 
 # refresh everything now
 adb shell am broadcast -n app.fanela.tv.debug/app.fanela.tv.DebugReceiver -a app.fanela.tv.REFRESH
 
-# check every Super League club's matches (names, sides, translations, duplicates, channels)
+# check a country's view of some leagues (names, sides, translations, duplicates, where to watch)
+adb shell am broadcast -n app.fanela.tv.debug/app.fanela.tv.DebugReceiver -a app.fanela.tv.AUDIT \
+  --es country GB --es leagues eng.1,uefa.champions --es max 6
+adb exec-out run-as app.fanela.tv.debug cat files/audit_GB.txt
+
+# check every Super League club as before (files/audit.txt)
 adb shell am broadcast -n app.fanela.tv.debug/app.fanela.tv.DebugReceiver -a app.fanela.tv.AUDIT
-adb exec-out run-as app.fanela.tv.debug cat files/audit.txt
 ```
+
+The `FOLLOW` action in the same receiver sets followed clubs by id. It doesn't save a club's league, so for clubs
+outside the Super League follow them in Settings instead.
+
+## The broadcaster data
+
+`app/src/main/res/raw/broadcasters.json` holds, per competition, the countries and their TV partners for the season,
+the official pages they came from (`sources`), the date they were last checked (`checked`), and for leagues that
+publish no list, a `none` note saying so. `broadcasters_wikipedia.json` fills empty cells from Wikipedia and is
+rebuilt with `tools/wiki_broadcasters.py`. An official row always wins over Wikipedia.
+
+When you change the table:
+
+- Only use the competition's own page or a broadcaster's own announcement, and add it to `sources`.
+- Set `checked` to the day you checked.
+- `DataTest` must pass: it rejects country codes that aren't ISO, empty names, a country listed twice, missing dates
+  and sources that aren't https.
+
+Each table row names the official page it came from, and `res/raw/broadcasters.json` carries the date it was checked.
+
+## Club names in Greek
+
+`I18n.java` gives every club in the leagues on offer a Greek name, and long ones a short form in `SHORT`. `NamesTest`
+checks this against a snapshot of every league's clubs (`app/src/test/resources/league_clubs.json`). When a promoted
+club appears, add its Greek name and refresh the snapshot. MLS, Brazilian, Argentine and Saudi clubs stay in Latin
+letters on purpose.
 
 ## Before merging into main
 
 - `./gradlew testDebugUnitTest lintRelease` passes.
-- The audit above shows no problems.
-- On a TV, with the remote: first start, following and unfollowing a club, switching language, opening a match and
-  going back, and turning Wi-Fi off (the app should say it's offline and still show saved fixtures).
+- The audit above shows no problems for at least Greece and one other country.
+- On a TV or the emulator, with the remote: first start, following and unfollowing clubs in two leagues, switching
+  language and country, opening a match and going back, and turning Wi-Fi off (the app should say it's offline and
+  still show saved fixtures).
+- Greece looks exactly as before: render Greek clubs' cards with `tools/demo_all.sh` before and after the change
+  and compare them.
 - Anything the user sees exists in both English and Greek (`I18n.java`).
 
 ## How the code is organised
 
-Plain Java with framework Views. There are no third-party libraries, which keeps the APK under 400 KB and means
-nothing breaks when a library changes.
+Plain Java with framework Views. There are no third-party libraries, which keeps the APK small and means nothing
+breaks when a library changes.
 
 - **HomeActivity:** the main screen. One row of cards per club, the match panel, and live polling only while it's
   visible.
-- **SettingsActivity:** first-run setup, the clubs grid, language, basketball, home-screen rows, About.
+- **SettingsActivity:** first-run setup, leagues and clubs, language, favourite team, country, basketball, home-screen
+  rows, About.
+- **Leagues:** the leagues on offer, their order and the viewer's country.
+- **Teams:** clubs per league, follows and the favourite team.
 - **Engine:** how often each club is refreshed, the live tick, and states that depend on the clock.
 - **Sources:** ESPN, EuroLeague and TheSportsDB.
-- **Guide:** the Sport24 and MagentaTV TV guides.
-- **Channels, Crests, Sofa:** channel logos and numbers, crests the feeds leave empty, and SofaScore as a third channel
-  source.
+- **Where / Watch:** chooses a where-to-watch source per country.
+  - **GreeceProvider:** the Greek TV guides, SofaScore and the clubs' TV rights, as in Fanela.
+  - **SeasonTableProvider:** `broadcasters.json`, then the Wikipedia layer for gaps.
+  - **RoninProvider:** per-match listings; off until a `roninKey` is set in `keystore.properties`.
+  - **TvGuideProvider:** the TV's own programme guide; debug builds only, never in a release.
+- **Guide, Channels, Crests, Sofa:** the Greek guides, channel logos and numbers, missing crests, SofaScore.
 - **Store:** merging the sources and saving them.
 - **Cards:** choosing which matches to show and drawing the cards.
-- **Badges:** drawn club badges, shown while a crest is still downloading.
+- **Logo, Brand:** the shirt logo in the favourite team's colours, and the app's tile and banner on the TV in the
+  nearest kit colour (one launcher entry per colour, started through LaunchActivity).
 - **HomeRows, UpdateJob, Updater:** the Android TV home-screen rows and the 15-minute job behind them.
-- **AppUpdate:** in-app updates from GitHub releases (switched off; see docs/RELEASE.md).
-- **Logo, Brand, LaunchActivity:** the shirt logo in the favourite club's colours, the TV tile in the nearest of eleven
-  kit colours (one launcher entry each), and the tiny screen those entries open, so switching tiles never closes the
-  app.
-- **I18n, Teams:** all text in English and Greek, and the list of clubs.
+- **I18n:** all text in English and Greek, and the clubs' Greek names.
 
 ## Secrets
 
-Release builds are signed with `fanela-release.jks`, using the passwords in `keystore.properties`. Neither file is in
-the repository, and `.gitignore` keeps it that way. Never commit them. Without them, `assembleRelease` still works but
-produces an unsigned APK, which is fine for testing.
+Release builds are signed with `fanela-release.jks`, using the passwords in `keystore.properties` (alias `fanela`).
+Neither file is in the repository, and `.gitignore` keeps it that way. Never commit them, and keep an offline copy of
+both: without the key, no update can be installed over Fanela and everyone would have to uninstall it first. Without them, `assembleRelease` still works but produces an unsigned APK,
+which is fine for testing.
 
-Releases, the signing key and the yearly upkeep of the TV rights table are covered in [docs/RELEASE.md](docs/RELEASE.md).
+Releases and the yearly upkeep of the broadcaster table are covered in [docs/RELEASE.md](docs/RELEASE.md).

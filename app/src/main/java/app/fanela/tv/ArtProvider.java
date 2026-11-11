@@ -17,7 +17,7 @@ public class ArtProvider extends ContentProvider {
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
         String name = uri.getLastPathSegment();
         // only our card files (letters, digits, underscore); never crest/image cache files or anything else
-        if (name == null || !name.matches("c[0-9]+_[a-z0-9_]+\\.png")) throw new FileNotFoundException(String.valueOf(uri));
+        if (name == null || !name.matches("c[a-z0-9]+_[a-z0-9_]+\\.png")) throw new FileNotFoundException(String.valueOf(uri));
         return ParcelFileDescriptor.open(new File(getContext().getFilesDir(), name), ParcelFileDescriptor.MODE_READ_ONLY);
     }
 

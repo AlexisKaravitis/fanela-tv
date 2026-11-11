@@ -181,7 +181,7 @@ public class HomeActivity extends Activity {
         scroll.setFillViewport(true);
         scroll.setClipChildren(false);
         scroll.setVerticalFadingEdgeEnabled(true);
-        scroll.setFadingEdgeLength(dp(40));
+        scroll.setFadingEdgeLength(dp(24));  // a short fade where rows slide under the pinned header
         scroll.setSmoothScrollingEnabled(true);
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -192,7 +192,8 @@ public class HomeActivity extends Activity {
         // the header and the details of the focused card stay put; the club rows scroll under them
         LinearLayout column = new LinearLayout(this);
         column.setOrientation(LinearLayout.VERTICAL);
-        column.setClipChildren(false);
+        // clipped: the rows scrolling up must slide under the header, not be drawn over it (the header and the
+        // focused cards have room to grow inside their own padding)
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.VERTICAL);
         top.setClipChildren(false);  // the focused Settings button grows: never cut it
@@ -288,8 +289,10 @@ public class HomeActivity extends Activity {
         long last = 0;
         boolean stale = false;
         for (String id : Teams.followed(this)) {
-            last = Math.max(last, Store.lastUpdate(this, id, "FC"));
-            stale |= Store.stale(this, id, "FC");
+            Teams.Club k = Teams.get(this, id);
+            String team = k == null ? "FC" : k.mainTeam();
+            last = Math.max(last, Store.lastUpdate(this, id, team));
+            stale |= Store.stale(this, id, team);
         }
         String s;
         if (Teams.followed(this).isEmpty()) s = "";
@@ -322,7 +325,7 @@ public class HomeActivity extends Activity {
             Section s = new Section();
             s.club = k;
             s.refs = Cards.forApp(app, k, all);
-            s.everLoaded = Store.lastUpdate(app, id, "FC") > 0;
+            s.everLoaded = Store.lastUpdate(app, id, k.mainTeam()) > 0;
             String tag = Cards.rowLogoLazy(app, k).tag();
             s.logo = logos.get(id + tag);
             if (s.logo == null) { s.logo = Cards.rowLogo(app, k); logos.put(id + tag, s.logo); }
@@ -587,13 +590,22 @@ public class HomeActivity extends Activity {
             spoken.append(", ").append(soon);
         }
         boolean upcoming = !r.last && !"off".equals(m.state);
-        if (upcoming) {
+        if (upcoming && m.channelKnown && Where.plain(m)) {  // outside the Greek sources: the channel names as pills
+            col.addView(channelPills(m));
+            spoken.append(". ").append(Cards.where(m, true));
+            if (!m.channelSure) {
+                TextView note = Ui.text(this, I18n.t("table_note"), 14, Ui.SUB, false);
+                note.setPadding(0, dp(6), 0, 0);
+                col.addView(note);
+                spoken.append(". ").append(note.getText());
+            }
+        } else if (upcoming) {
             TextView where = Ui.text(this, Cards.where(m, true), 18, m.channelSure ? Ui.TEXT : Ui.SUB, false);
             where.setPadding(0, dp(8), 0, 0);
             col.addView(where);
             spoken.append(". ").append(where.getText());
-            if (m.channelKnown && !m.channelSure) {
-                TextView note = Ui.text(this, I18n.t("channel_note"), 14, Ui.SUB, false);
+            if ((m.channelKnown && !m.channelSure) || Where.noData(m)) {
+                TextView note = Ui.text(this, I18n.t(Where.noData(m) ? "no_table_note" : "channel_note"), 14, Ui.SUB, false);
                 note.setPadding(0, dp(6), 0, 0);
                 col.addView(note);
                 spoken.append(". ").append(note.getText());
@@ -656,6 +668,29 @@ public class HomeActivity extends Activity {
                 if (thumb != null) thumb.recycle();
             }});
         }});
+    }
+
+    /** "Usually on  [Sky Sports]  [TNT Sports]": the label, then one rounded pill per channel. */
+    private View channelPills(Match m) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(10), 0, 0);
+        if (!m.channelSure) {
+            TextView lead = Ui.text(this, I18n.t("usually"), 16, Ui.SUB, false);
+            lead.setPadding(0, 0, dp(12), 0);
+            row.addView(lead);
+        }
+        for (String n : Cards.names(m)) {
+            TextView p = Ui.text(this, n, 16, Ui.TEXT, true);
+            p.setSingleLine(true);
+            p.setPadding(dp(14), dp(5), dp(14), dp(5));
+            p.setBackground(Ui.rounded(this, Color.argb(m.channelSure ? 56 : 40, 255, 255, 255), 16, 0));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.setMargins(0, 0, dp(8), 0);
+            row.addView(p, lp);
+        }
+        return row;
     }
 
     private void closeDetail() {

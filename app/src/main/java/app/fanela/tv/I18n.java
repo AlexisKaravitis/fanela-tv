@@ -52,7 +52,7 @@ final class I18n {
         + "What stays on your TV: the clubs you follow, your language and other settings, and saved fixtures and images. "
         + "Clearing the app's data or uninstalling Fanela deletes them.\n\n"
         + "What goes over the internet: to show fixtures, scores and channels, Fanela downloads public sports data from the services "
-        + "listed under \"Where the information comes from\", and to check for app updates it asks GitHub. Like any web request, these services can see your TV's IP address. "
+        + "listed under \"Sources and credits\". Like any web request, these services can see your TV's IP address. "
         + "Fanela doesn't send them anything about you, and it doesn't use your location.\n\n"
         + "Home-screen rows (Android TV only): if you turn them on, Fanela gives the TV's home screen pictures of match cards to display. "
         + "They stay on the TV.\n\n"
@@ -63,7 +63,7 @@ final class I18n {
         + "Τι μένει στην τηλεόρασή σου: οι ομάδες που ακολουθείς, η γλώσσα και οι υπόλοιπες ρυθμίσεις, καθώς και το αποθηκευμένο πρόγραμμα "
         + "και οι εικόνες. Διαγράφονται αν καθαρίσεις τα δεδομένα της εφαρμογής ή την απεγκαταστήσεις.\n\n"
         + "Τι περνά από το διαδίκτυο: για να δείξει πρόγραμμα, σκορ και κανάλια, το Fanela κατεβάζει δημόσια αθλητικά στοιχεία από τις υπηρεσίες "
-        + "της ενότητας «Από πού έρχονται τα στοιχεία», και για ενημερώσεις της εφαρμογής ρωτά το GitHub. Όπως σε κάθε σύνδεση, οι υπηρεσίες αυτές βλέπουν τη διεύθυνση IP της τηλεόρασης. "
+        + "της ενότητας «Πηγές και ευχαριστίες». Όπως σε κάθε σύνδεση, οι υπηρεσίες αυτές βλέπουν τη διεύθυνση IP της τηλεόρασης. "
         + "Το Fanela δεν τους στέλνει τίποτα για σένα και δεν χρησιμοποιεί την τοποθεσία σου.\n\n"
         + "Σειρές στην αρχική οθόνη (μόνο Android TV): αν τις ενεργοποιήσεις, το Fanela δίνει στην αρχική οθόνη εικόνες με τους αγώνες. "
         + "Μένουν στην τηλεόραση.\n\n"
@@ -98,6 +98,19 @@ final class I18n {
         p("euroleague.ff", "EuroLeague · Final Four", "EuroLeague · Final Four"); p("euroleague.pi", "EuroLeague · Play-In", "EuroLeague · Play-In");
         p("eurocup", "EuroCup", "EuroCup"); p("gbl", "Basket League", "Basket League"); p("gbl.cup", "Κύπελλο μπάσκετ", "Basketball Cup");
         p("bcl", "Basketball Champions League", "Basketball Champions League"); p("fiba.europe_cup", "FIBA Europe Cup", "FIBA Europe Cup");
+        // leagues outside Greece (ESPN slugs) and their usual cups
+        p("eng.1", "Premier League", "Premier League"); p("esp.1", "LaLiga", "LaLiga"); p("ita.1", "Serie A", "Serie A");
+        p("ger.1", "Bundesliga", "Bundesliga"); p("fra.1", "Ligue 1", "Ligue 1"); p("por.1", "Liga Portugal", "Liga Portugal");
+        p("ned.1", "Eredivisie", "Eredivisie"); p("tur.1", "Süper Lig", "Süper Lig"); p("usa.1", "MLS", "MLS");
+        p("bra.1", "Brasileirão", "Brasileirão"); p("arg.1", "Liga Profesional", "Argentine Primera"); p("ksa.1", "Saudi Pro League", "Saudi Pro League");
+        p("nba", "NBA", "NBA");
+        p("eng.fa", "FA Cup", "FA Cup"); p("eng.league_cup", "League Cup", "League Cup"); p("esp.copa_del_rey", "Copa del Rey", "Copa del Rey");
+        p("ita.coppa_italia", "Coppa Italia", "Coppa Italia"); p("ger.dfb_pokal", "DFB-Pokal", "DFB-Pokal");
+        p("fra.coupe_de_france", "Coupe de France", "Coupe de France"); p("por.taca.portugal", "Taça de Portugal", "Taça de Portugal");
+        p("ned.cup", "KNVB Beker", "KNVB Cup"); p("usa.open", "US Open Cup", "US Open Cup");
+        p("concacaf.champions", "Concacaf Champions Cup", "Concacaf Champions Cup");
+        p("conmebol.libertadores", "Copa Libertadores", "Copa Libertadores"); p("conmebol.sudamericana", "Copa Sudamericana", "Copa Sudamericana");
+        p("afc.champions", "AFC Champions League", "AFC Champions League");
         // home screen
         p("app", "Fanela", "Fanela"); p("settings", "Ρυθμίσεις", "Settings");
         p("updated", "Ενημέρωση: %s", "Updated %s"); p("updating", "Ενημέρωση…", "Updating…");
@@ -114,17 +127,39 @@ final class I18n {
         p("close", "Κλείσιμο", "Close");
         p("channel_note", "Αναμενόμενο κανάλι, με βάση τα τηλεοπτικά δικαιώματα της γηπεδούχου. Επιβεβαίωσέ το στον οδηγό του παρόχου σου.",
             "Expected channel, based on the home team's TV rights. Check your provider's guide to be sure.");
+        p("usually", "Συνήθως", "Usually on");
+        p("check_guide", "Δες τον οδηγό του παρόχου σου", "Check your provider's guide");
+        p("selected", "επιλεγμένο", "selected");
+        p("checked_title", "Τελευταίος έλεγχος με τις επίσημες σελίδες των διοργανώσεων:", "Last checked against the competitions' official pages:");
+        p("no_official_list", "δεν δημοσιεύει λίστα για άλλες χώρες", "publishes no list for other countries");
+        p("no_table_note", "Το Fanela δεν έχει ακόμη τους τηλεοπτικούς συνεργάτες αυτής της διοργάνωσης για τη χώρα σου.",
+            "Fanela doesn't have this competition's TV partners for your country yet.");
+        p("usually_on", "συνήθως: %s", "usually on %s"); p("usually_on_cap", "Συνήθως: %s", "Usually on %s");
+        p("on_channels", "κανάλι: %s", "on %s"); p("on_channels_cap", "Κανάλι: %s", "On %s");
+        p("table_note", "Από τη λίστα τηλεοπτικών συνεργατών της διοργάνωσης για αυτή τη σεζόν. Το ακριβές κανάλι θα το βρεις στον οδηγό του παρόχου σου.",
+            "From the competition's list of TV partners for this season. Your provider's guide will have the exact channel.");
         // settings
         p("welcome_title", "Καλώς ήρθες στο Fanela", "Welcome to Fanela");
-        p("welcome_text", "Διάλεξε γλώσσα και τις ομάδες που ακολουθείς. Μπορείς να τα αλλάξεις όποτε θέλεις από τις Ρυθμίσεις.",
-            "Choose a language and the clubs you follow. You can change both later in Settings.");
+        p("welcome_text", "Διάλεξε γλώσσα, χώρα και τις ομάδες που ακολουθείς. Μπορείς να τα αλλάξεις όποτε θέλεις από τις Ρυθμίσεις.",
+            "Choose your language, your country and the clubs you follow. You can change them any time in Settings.");
+        p("language_country_title", "Γλώσσα και χώρα", "Language and country");
+        p("football_group", "Ποδόσφαιρο", "Football"); p("basketball_group", "Μπάσκετ", "Basketball");
+        p("no_country", "Καμία", "None");
+        p("tv_country", "Η χώρα της τηλεόρασης", "This TV's country");
+        p("fixtures_only", "Μόνο πρόγραμμα και σκορ, χωρίς κανάλια", "Fixtures and scores only, no TV info");
+        p("tv_country_fixtures_only", "Η χώρα της τηλεόρασης · μόνο πρόγραμμα και σκορ", "This TV's country · fixtures and scores only");
         p("language_title", "Γλώσσα", "Language"); p("done", "Τέλος", "Done");
-        p("favourite", "Αγαπημένη ομάδα", "Favourite team");
+        p("favourite", "Αγαπημένη ομάδα", "Favourite club");
         p("favourite_hint", "Το Fanela παίρνει τα χρώματά της", "Fanela takes on its colours");
+        p("country", "Χώρα", "Country");
+        p("country_hint", "Για τα κανάλια που βλέπεις και ποιες λίγκες εμφανίζονται πρώτες", "Sets the TV channels you see, and which leagues come first");
+        p("loading_clubs", "Φόρτωση ομάδων…", "Getting the clubs…");
+        p("clubs_failed", "Δεν φόρτωσαν οι ομάδες. Έλεγξε τη σύνδεση και πάτα ξανά OK στη λίγκα.",
+            "Couldn't get the clubs. Check the connection, then press OK on the league again.");
         p("saved_hint", "Οι αλλαγές αποθηκεύονται αμέσως.", "Changes are saved straight away.");
         p("clubs", "Οι ομάδες σου", "Your clubs");
         p("clubs_hint", "Πάτα OK σε μια ομάδα για να την ακολουθήσεις ή να την αφήσεις.", "Press OK on a club to follow or unfollow it.");
-        p("options", "Επιλογές", "Options"); p("language", "Γλώσσα · Language", "Language · Γλώσσα"); p("lang_value", "Ελληνικά", "English");
+        p("options", "Επιλογές", "Options"); p("language", "Γλώσσα · Language", "Language · Γλώσσα"); p("language_plain", "Γλώσσα · Language", "Language"); p("lang_value", "Ελληνικά", "English");
         p("basketball", "Μπάσκετ", "Basketball"); p("basketball_hint", "Δείξε και τους αγώνες μπάσκετ των ομάδων", "Also show the clubs' basketball games");
         p("rows", "Σειρές στην αρχική οθόνη", "Home-screen rows");
         p("rows_hint", "Μια σειρά για κάθε ομάδα στην αρχική οθόνη της τηλεόρασης", "A row for each club on the TV's home screen");
@@ -135,11 +170,26 @@ final class I18n {
         p("independent", "Το Fanela δεν συνδέεται με καμία ομάδα, διοργάνωση ή κανάλι και δεν έχει την έγκρισή τους. Τα ονόματα και τα σήματα των ομάδων ανήκουν στις ομάδες και εμφανίζονται μόνο για να φαίνεται ποια ομάδα παίζει.",
             "Fanela isn't affiliated with or endorsed by any club, league or broadcaster. Club names and crests belong to the clubs and are shown only to identify who is playing.");
         p("sources_title", "Από πού έρχονται τα στοιχεία", "Where the information comes from");
-        p("sources_full", "Πρόγραμμα και σκορ: ESPN, EuroLeague, TheSportsDB. Κανάλια και σήματα: οδηγοί προγράμματος MagentaTV και Sport24, SofaScore. Οι ώρες και τα κανάλια μπορεί να αλλάξουν. Γραμματοσειρά: Google Sans (SIL Open Font License).",
-            "Fixtures and scores: ESPN, EuroLeague, TheSportsDB. Channels and crests: the MagentaTV and Sport24 TV guides, SofaScore. Times and channels can change. Font: Google Sans (SIL Open Font License).");
-        p("sources_store", "Πρόγραμμα και σκορ: ESPN, EuroLeague, TheSportsDB. Κανάλια: τα τηλεοπτικά δικαιώματα κάθε ομάδας για τη σεζόν. Οι ώρες και τα κανάλια μπορεί να αλλάξουν.",
-            "Fixtures and scores: ESPN, EuroLeague, TheSportsDB. Channels: each club's TV rights for the season. Times and channels can change.");
+        p("sources_full", "Πρόγραμμα και σκορ: ESPN, EuroLeague, TheSportsDB. Κανάλια και σήματα: οδηγοί προγράμματος MagentaTV και Sport24, SofaScore. Εκτός Ελλάδας: οι λίστες τηλεοπτικών συνεργατών που δημοσιεύουν οι διοργανώσεις και η UEFA. Οι ώρες και τα κανάλια μπορεί να αλλάξουν. Γραμματοσειρά: Google Sans (SIL Open Font License).",
+            "Fixtures and scores: ESPN, EuroLeague, TheSportsDB. Channels and crests: the MagentaTV and Sport24 TV guides, SofaScore. Outside Greece: the TV partner lists the leagues and UEFA publish. Times and channels can change. Font: Google Sans (SIL Open Font License).");
+        p("sources_store", "Πρόγραμμα και σκορ: ESPN, EuroLeague, TheSportsDB. Κανάλια: τα τηλεοπτικά δικαιώματα κάθε ομάδας για τη σεζόν και, εκτός Ελλάδας, οι λίστες τηλεοπτικών συνεργατών των διοργανώσεων. Οι ώρες και τα κανάλια μπορεί να αλλάξουν.",
+            "Fixtures and scores: ESPN, EuroLeague, TheSportsDB. Channels: each club's TV rights for the season and, outside Greece, the leagues' lists of TV partners. Times and channels can change.");
         p("privacy", "Απόρρητο", "Privacy"); p("read", "Ανάγνωση", "Read");
+        p("credits", "Πηγές και ευχαριστίες", "Sources and credits");
+        p("credits_short", "Από πού έρχονται το πρόγραμμα, τα σκορ και τα κανάλια", "Where fixtures, scores and channels come from");
+        p("credits_full",
+            "Πρόγραμμα και σκορ: ESPN, EuroLeague, TheSportsDB.\n\n"
+            + "Κανάλια στην Ελλάδα: οι οδηγοί προγράμματος MagentaTV και Sport24, το SofaScore και τα τηλεοπτικά δικαιώματα κάθε ομάδας για τη σεζόν.\n\n"
+            + "Κανάλια σε άλλες χώρες: οι λίστες τηλεοπτικών συνεργατών που δημοσιεύουν η UEFA, η Premier League, η LaLiga, η Lega Serie A, η Bundesliga, "
+            + "η LFP, η Eredivisie, η TFF, το MLS, το NBA και η EuroLeague Basketball· για τη Liga Portugal, οι ανακοινώσεις των ίδιων των καναλιών. Όπου αυτές δεν αναφέρουν κάτι, το Fanela παίρνει τα στοιχεία από τη Wikipedia: %s "
+            + "(συντάκτες της Wikipedia, άδεια CC BY-SA 4.0, creativecommons.org/licenses/by-sa/4.0). Ο πίνακας του Fanela που προκύπτει διατίθεται με την ίδια άδεια.\n\n"
+            + "Οι ώρες και τα κανάλια μπορεί να αλλάξουν. Γραμματοσειρά: Google Sans (SIL Open Font License).",
+            "Fixtures and scores: ESPN, EuroLeague, TheSportsDB.\n\n"
+            + "Channels in Greece: the MagentaTV and Sport24 TV guides, SofaScore, and each club's TV rights for the season.\n\n"
+            + "Channels in other countries: the TV partner lists published by UEFA, the Premier League, LaLiga, Lega Serie A, the Bundesliga, "
+            + "the LFP, the Eredivisie, the TFF, MLS, the NBA and EuroLeague Basketball; for Liga Portugal, the broadcasters' own announcements. Where they say nothing, Fanela uses Wikipedia: %s "
+            + "(by Wikipedia contributors, CC BY-SA 4.0, creativecommons.org/licenses/by-sa/4.0). Fanela's table made from them is shared under the same licence.\n\n"
+            + "Times and channels can change. Font: Google Sans (SIL Open Font License).");
         p("privacy_short", "Χωρίς λογαριασμό, διαφημίσεις ή παρακολούθηση. Οι επιλογές σου μένουν σε αυτή την τηλεόραση.",
             "No account, no ads, no tracking. Your choices stay on this TV.");
         p("privacy_full", PRIVACY_EL, PRIVACY_EN);
@@ -174,7 +224,18 @@ final class I18n {
         return d;
     }
 
-    static String comp(String c) { return c == null ? "" : T.containsKey(c) ? t(c) : c; }
+    static String comp(String c) {
+        if (c == null) return "";
+        if (!el() && !greekViewer && ABROAD.containsKey(c)) return ABROAD.get(c);  // "Super League" alone means Greece only there
+        return T.containsKey(c) ? t(c) : c;
+    }
+
+    /** English names of the Greek competitions for viewers outside Greece and Cyprus. */
+    private static final Map<String, String> ABROAD = new HashMap<>();
+    static {
+        ABROAD.put("gre.1", "Greek Super League"); ABROAD.put("gbl", "Greek Basket League");
+        ABROAD.put("gbl.cup", "Greek Basketball Cup");
+    }
 
     // ---------- team names ----------
     private static final Map<String, String> GR = new HashMap<>();
@@ -224,7 +285,103 @@ final class I18n {
             {"Buducnost", "Μπούντουτσνοστ"}, {"U-BT Cluj", "Κλουζ"}, {"Venezia", "Βενέτσια"}, {"Reyer Venezia", "Βενέτσια"},
             {"Beşiktaş", "Μπεσίκτας"}, {"Besiktas Fibabanka", "Μπεσίκτας"}, {"Manresa", "Μανρέσα"}, {"Wolves", "Γουλβς"},
             {"Slask", "Σλασκ"}, {"Ankara", "Άγκυρα"}, {"Neptunas", "Νεπτούνας"}, {"Trapani", "Τράπανι"}, {"Tenerife", "Τενερίφη"}};
+        // the whole Premier League in Greek, as the Greek sports press writes it, so a Greek grid never mixes alphabets
+        String[][] pl = {
+            {"Aston Villa", "Άστον Βίλα"}, {"Brentford", "Μπρέντφορντ"}, {"Brighton & Hove Albion", "Μπράιτον"},
+            {"Coventry City", "Κόβεντρι"}, {"Crystal Palace", "Κρίσταλ Πάλας"}, {"Everton", "Έβερτον"}, {"Fulham", "Φούλαμ"},
+            {"Hull City", "Χαλ"}, {"Ipswich Town", "Ίπσουιτς"}, {"Leeds United", "Λιντς"}, {"Newcastle United", "Νιούκαστλ"},
+            {"Nottingham Forest", "Νότιγχαμ Φόρεστ"}, {"Sunderland", "Σάντερλαντ"}, {"AFC Bournemouth", "Μπόρνμουθ"},
+            {"West Ham United", "Γουέστ Χαμ"}, {"Wolverhampton Wanderers", "Γουλβς"}, {"Burnley", "Μπέρνλι"},
+            {"Manchester United", "Μάντσεστερ Γιουνάιτεντ"}, {"Manchester City", "Μάντσεστερ Σίτι"}};
+        for (String[] x : pl) GR.put(x[0], x[1]);
         for (String[] x : n) {
+            if (GR.containsKey(x[0]) && x[0].startsWith("Manchester")) continue;  // the full names above win
+            GR.put(x[0], x[1]);
+            String k = Cards.key(x[1]);
+            if (!EN.containsKey(k)) EN.put(k, x[0]);
+        }
+        // Greek back to English for the Premier League only where the list above has nothing ("Γουλβς" stays Wolves,
+        // the EuroCup basketball club, as before)
+        for (String[] x : pl) { String k = Cards.key(x[1]); if (!EN.containsKey(k)) EN.put(k, x[0]); }
+        // every other shipped league in Greek too (after the list above, so these win), so a Greek grid never mixes
+        // alphabets. MLS, the Brasileirão, the Liga Profesional and the Saudi Pro League stay in Latin letters as a whole:
+        // the Greek press has no settled forms for most of their clubs.
+        String[][] world = {
+            // LaLiga
+            {"Alavés", "Αλαβές"}, {"Athletic Club", "Αθλέτικ Μπιλμπάο"}, {"Atlético Madrid", "Ατλέτικο Μαδρίτης"},
+            {"Atletico Madrid", "Ατλέτικο Μαδρίτης"}, {"Celta Vigo", "Θέλτα"}, {"Deportivo", "Ντεπορτίβο"}, {"Elche", "Έλτσε"},
+            {"Espanyol", "Εσπανιόλ"}, {"Getafe", "Χετάφε"}, {"Levante", "Λεβάντε"}, {"Málaga", "Μάλαγα"}, {"Osasuna", "Οσασούνα"},
+            {"Racing Santander", "Ράσινγκ Σανταντέρ"}, {"Rayo Vallecano", "Ράγιο Βαγιεκάνο"}, {"Real Sociedad", "Ρεάλ Σοσιεδάδ"},
+            {"Mallorca", "Μαγιόρκα"}, {"Girona", "Τζιρόνα"}, {"Real Oviedo", "Οβιέδο"}, {"Las Palmas", "Λας Πάλμας"},
+            {"Valladolid", "Βαγιαδολίδ"}, {"Leganés", "Λεγανές"},
+            // Serie A
+            {"Bologna", "Μπολόνια"}, {"Cagliari", "Κάλιαρι"}, {"Como", "Κόμο"}, {"Fiorentina", "Φιορεντίνα"}, {"Frosinone", "Φροζινόνε"},
+            {"Genoa", "Τζένοα"}, {"Lecce", "Λέτσε"}, {"Monza", "Μόντσα"}, {"Parma", "Πάρμα"}, {"Sassuolo", "Σασουόλο"},
+            {"Torino", "Τορίνο"}, {"Udinese", "Ουντινέζε"}, {"Hellas Verona", "Βερόνα"}, {"Empoli", "Έμπολι"}, {"Pisa", "Πίζα"},
+            {"Cremonese", "Κρεμονέζε"}, {"Venezia", "Βενέτσια"},
+            // Bundesliga
+            {"1. FC Union Berlin", "Ουνιόν Βερολίνου"}, {"Borussia Mönchengladbach", "Μπορούσια Μένχενγκλαντμπαχ"},
+            {"Eintracht Frankfurt", "Άιντραχτ Φρανκφούρτης"}, {"FC Augsburg", "Άουγκσμπουργκ"}, {"FC Cologne", "Κολωνία"},
+            {"Hamburg SV", "Αμβούργο"}, {"Mainz", "Μάιντς"}, {"SC Freiburg", "Φράιμπουργκ"}, {"SC Paderborn 07", "Πάντερμπορν"},
+            {"SV Elversberg", "Έλφερσμπεργκ"}, {"Schalke 04", "Σάλκε"}, {"TSG Hoffenheim", "Χοφενχάιμ"}, {"VfB Stuttgart", "Στουτγκάρδη"},
+            {"Werder Bremen", "Βέρντερ Βρέμης"}, {"VfL Wolfsburg", "Βόλφσμπουργκ"}, {"1. FC Heidenheim 1846", "Χάιντενχαϊμ"},
+            {"St. Pauli", "Σανκτ Πάουλι"}, {"VfL Bochum", "Μπόχουμ"}, {"Holstein Kiel", "Κίελο"},
+            // Ligue 1
+            {"AJ Auxerre", "Οσέρ"}, {"Angers", "Ανζέ"}, {"Brest", "Μπρεστ"}, {"Le Havre AC", "Χάβρη"}, {"Le Mans", "Λε Μαν"},
+            {"Lens", "Λανς"}, {"Lorient", "Λοριάν"}, {"Nice", "Νις"}, {"Strasbourg", "Στρασβούργο"}, {"Toulouse", "Τουλούζ"},
+            {"Troyes", "Τρουά"}, {"Paris FC", "Παρί FC"}, {"Nantes", "Ναντ"}, {"Metz", "Μετς"}, {"Montpellier", "Μονπελιέ"},
+            {"Reims", "Ρεμς"}, {"Saint-Etienne", "Σεντ Ετιέν"},
+            // Liga Portugal
+            {"Académico de Viseu", "Ακαδέμικο Βιζέου"}, {"Alverca", "Αλβέρκα"}, {"Arouca", "Αρούκα"}, {"Braga", "Μπράγκα"},
+            {"C.D. Nacional", "Νασιονάλ"}, {"Casa Pia", "Κάζα Πία"}, {"Estoril", "Εστορίλ"}, {"Estrela", "Εστρέλα"},
+            {"FC Famalicao", "Φαμαλικάο"}, {"Gil Vicente", "Ζιλ Βιθέντε"}, {"Maritimo", "Μαρίτιμο"}, {"Moreirense", "Μορεϊρένσε"},
+            {"Rio Ave", "Ρίο Άβε"}, {"Santa Clara", "Σάντα Κλάρα"}, {"Vitória de Guimaraes", "Γκιμαράες"}, {"AVS", "AVS"},
+            {"Tondela", "Τοντέλα"},
+            // Eredivisie
+            {"ADO Den Haag", "Ντεν Χάαγκ"}, {"AZ Alkmaar", "Άλκμααρ"}, {"Excelsior", "Εξέλσιορ"}, {"FC Groningen", "Χρόνινγκεν"},
+            {"FC Twente", "Τβέντε"}, {"FC Utrecht", "Ουτρέχτη"}, {"Fortuna Sittard", "Φορτούνα Σιτάρντ"},
+            {"Go Ahead Eagles", "Γκόου Αχέντ Ιγκλς"}, {"Heerenveen", "Χέρενφεν"}, {"NEC Nijmegen", "Νάιμεχεν"},
+            {"PEC Zwolle", "Ζβόλε"}, {"SC Cambuur", "Κάμπουρ"}, {"Sparta Rotterdam", "Σπάρτα Ρότερνταμ"}, {"Telstar", "Τέλσταρ"},
+            {"Willem II", "Βίλεμ II"}, {"NAC Breda", "Μπρέντα"}, {"Heracles Almelo", "Χεράκλες"}, {"Volendam", "Φόλενταμ"},
+            // Süper Lig
+            {"Alanyaspor", "Αλάνιασπορ"}, {"Amed SFK", "Άμεντ"}, {"Caykur Rizespor", "Ριζέσπορ"}, {"Erzurum BB", "Ερζουρούμ"},
+            {"Eyupspor", "Εγιούπσπορ"}, {"Gaziantep FK", "Γκαζιαντέπ"}, {"Genclerbirligi", "Γκεντζλερμπιρλιγί"}, {"Goztepe", "Γκεζτεπέ"},
+            {"Istanbul Basaksehir", "Μπασακσεχίρ"}, {"Kasimpasa", "Κασίμπασα"}, {"Kocaelispor", "Κοτζαέλισπορ"},
+            {"Konyaspor", "Κόνιασπορ"}, {"Samsunspor", "Σαμσουνσπόρ"}, {"Trabzonspor", "Τραμπζονσπόρ"}, {"Çorum FK", "Τσορούμ"},
+            {"Antalyaspor", "Αντάλιασπορ"}, {"Kayserispor", "Καϊσέρισπορ"}, {"Fatih Karagümrük", "Καραγκιουμρούκ"},
+            // the European cups' other clubs
+            {"Bodo/Glimt", "Μπόντο/Γκλιμτ"}, {"LASK Linz", "ΛΑΣΚ Λιντς"}, {"Sabah FK", "Σαμπάχ"}, {"Slovan Bratislava", "Σλόβαν Μπρατισλάβας"},
+            {"Viking FK", "Βίκινγκ"}, {"Ararat-Armenia", "Αραράτ Αρμένια"}, {"Hapoel Be'er", "Χάποελ Μπερ Σεβά"},
+            {"Hapoel Be'er Sheva", "Χάποελ Μπερ Σεβά"}, {"Jagiellonia Bialystok", "Γιαγκελόνια"}, {"Lech Poznan", "Λεχ Πόζναν"},
+            {"Levski Sofia", "Λέφσκι Σόφιας"}, {"Lillestrom", "Λίλεστρεμ"}, {"RB Salzburg", "Ζάλτσμπουργκ"},
+            {"SK Sturm Graz", "Στουρμ Γκρατς"}, {"Torreense", "Τορεένσε"}, {"Union St.-Gilloise", "Ουνιόν Σεν Ζιλουάζ"},
+            {"Viktoria Plzen", "Βικτόρια Πλζεν"}, {"AGF", "Ορχούς"}, {"Borac Banja Luka", "Μπόρατς Μπάνια Λούκα"},
+            {"CSKA Sofia", "ΤΣΣΚΑ Σόφιας"}, {"CSU Craiova", "Κραϊόβα"}, {"Egnatia", "Εγνατία"}, {"F.C. København", "Κοπεγχάγη"},
+            {"FC Lugano", "Λουγκάνο"}, {"FC Midtjylland", "Μίντιλαντ"}, {"FC Nordsjælland", "Νόρσελαντ"}, {"FC Thun", "Τουν"},
+            {"Hajduk Split", "Χάιντουκ Σπλιτ"}, {"Heart of Midlothian", "Χαρτς"}, {"Iberia 1999", "Ιβέρια 1999"},
+            {"Inter D'Escaldes", "Ίντερ Εσκάλδες"}, {"Jablonec", "Γιάμπλονετς"}, {"KAA Gent", "Γάνδη"},
+            {"Kairat Almaty", "Καϊράτ Αλμάτι"}, {"Kauno Zalgiris", "Κάουνο Ζαλγκίρις"}, {"KuPS Kuopio", "ΚουΠΣ"},
+            {"Lincoln Red Imps", "Λίνκολν Ρεντ Ιμπς"}, {"Mjällby AIF", "Μιέλμπι"}, {"Pafos", "Πάφος"}, {"Riga FC", "Ρίγα"},
+            {"SK Brann", "Μπραν"}, {"Sint-Truidense", "Σεν Τρόιντεν"}, {"Qarabag FK", "Καραμπάχ"}, {"Olympique Lyonnais", "Λιόν"},
+            // the NBA, as the Greek press writes it
+            {"Atlanta Hawks", "Ατλάντα Χοκς"}, {"Boston Celtics", "Βοστώνη Σέλτικς"}, {"Brooklyn Nets", "Μπρούκλιν Νετς"},
+            {"Charlotte Hornets", "Σάρλοτ Χόρνετς"}, {"Chicago Bulls", "Σικάγο Μπουλς"}, {"Cleveland Cavaliers", "Κλίβελαντ Καβαλίερς"},
+            {"Dallas Mavericks", "Ντάλας Μάβερικς"}, {"Denver Nuggets", "Ντένβερ Νάγκετς"}, {"Detroit Pistons", "Ντιτρόιτ Πίστονς"},
+            {"Golden State Warriors", "Γκόλντεν Στέιτ Γουόριορς"}, {"Houston Rockets", "Χιούστον Ρόκετς"},
+            {"Indiana Pacers", "Ιντιάνα Πέισερς"}, {"LA Clippers", "Λος Άντζελες Κλίπερς"}, {"Los Angeles Lakers", "Λος Άντζελες Λέικερς"},
+            {"Memphis Grizzlies", "Μέμφις Γκρίζλις"}, {"Miami Heat", "Μαϊάμι Χιτ"}, {"Milwaukee Bucks", "Μιλγουόκι Μπακς"},
+            {"Minnesota Timberwolves", "Μινεσότα Τίμπεργουλβς"}, {"New Orleans Pelicans", "Νέα Ορλεάνη Πέλικανς"},
+            {"New York Knicks", "Νέα Υόρκη Νικς"}, {"Oklahoma City Thunder", "Οκλαχόμα Σίτι Θάντερ"}, {"Orlando Magic", "Ορλάντο Μάτζικ"},
+            {"Philadelphia 76ers", "Φιλαδέλφεια Σίξερς"}, {"Phoenix Suns", "Φοίνιξ Σανς"}, {"Portland Trail Blazers", "Πόρτλαντ Μπλέιζερς"},
+            {"Sacramento Kings", "Σακραμέντο Κινγκς"}, {"San Antonio Spurs", "Σαν Αντόνιο Σπερς"}, {"Toronto Raptors", "Τορόντο Ράπτορς"},
+            {"Utah Jazz", "Γιούτα Τζαζ"}, {"Washington Wizards", "Ουάσιγκτον Ουίζαρντς"},
+            // the EuroCup's other clubs (EuroLeague abbreviatedName)
+            {"BOSNA", "Μπόσνα"}, {"Buducnost VOLI", "Μπούντουτσνοστ"}, {"Burgos", "Μπούργος"}, {"Cedevita Olimp", "Τσεντεβίτα"},
+            {"Chemnitz", "Κέμνιτς"}, {"Cosea JL Bourg", "Μπουρ"}, {"Derthona", "Τορτόνα"}, {"K&U Manresa", "Μανρέσα"},
+            {"LL Tenerife", "Τενερίφη"}, {"Le Mans Sarthe", "Λε Μαν"}, {"London", "Λόντον Λάιονς"}, {"London Lions", "Λόντον Λάιονς"},
+            {"Maxima Roma", "Μάξιμα Ρόμα"}, {"Roma", "Ρόμα"}, {"Reyer Venice", "Βενέτσια"}, {"Rostock", "Ρόστοκ"},
+            {"Siauliai", "Σιαουλιάι"}, {"Skyliners", "Φρανκφούρτη"}, {"Tofas Bursa", "Τόφας"}};
+        for (String[] x : world) {
             GR.put(x[0], x[1]);
             String k = Cards.key(x[1]);
             if (!EN.containsKey(k)) EN.put(k, x[0]);
@@ -285,6 +442,12 @@ final class I18n {
      * The name on a match card, where space is tight: the form fans use ("AEK", "Man City"), so one club reads the same
      * on its football and basketball cards. Everywhere else (titles, Settings) the full name stays.
      */
+    /** The short form of a name already in the current language (club tiles in Settings). */
+    static String shortName(String name) {
+        String s = SHORT.get(name);
+        return s != null ? s : name;
+    }
+
     static String shortTeam(String raw) {
         String n = team(raw);
         String s = SHORT.get(n);
@@ -303,7 +466,43 @@ final class I18n {
             {"Bayern Munich", "Bayern"}, {"Borussia Dortmund", "Dortmund"}, {"Bayer Leverkusen", "Leverkusen"},
             {"Atletico Madrid", "Atlético"}, {"Atlético Madrid", "Atlético"}, {"Internazionale", "Inter"},
             {"Dubai Basketball", "Dubai"}, {"Maccabi Tel Aviv", "Maccabi"},
-            {"Μάντσεστερ Γιουνάιτεντ", "Μάντσεστερ Γ."}, {"Μάντσεστερ Σίτι", "Μάντσεστερ Σ."}};
+            {"Μάντσεστερ Γιουνάιτεντ", "Γιουνάιτεντ"}, {"Μάντσεστερ Σίτι", "Σίτι"}, {"Νότιγχαμ Φόρεστ", "Φόρεστ"},
+            // long names elsewhere: the form fans use
+            {"Borussia Mönchengladbach", "Gladbach"}, {"Μπορούσια Μένχενγκλαντμπαχ", "Γκλάντμπαχ"},
+            {"Eintracht Frankfurt", "Frankfurt"}, {"Άιντραχτ Φρανκφούρτης", "Άιντραχτ"}, {"1. FC Union Berlin", "Union Berlin"},
+            {"Ουνιόν Βερολίνου", "Ουνιόν"}, {"Βέρντερ Βρέμης", "Βέρντερ"}, {"Ατλέτικο Μαδρίτης", "Ατλέτικο"},
+            {"Αθλέτικ Μπιλμπάο", "Αθλέτικ"}, {"Ράσινγκ Σανταντέρ", "Ράσινγκ"}, {"Ράγιο Βαγιεκάνο", "Ράγιο"},
+            {"Ρεάλ Σοσιεδάδ", "Σοσιεδάδ"}, {"Ακαδέμικο Βιζέου", "Ακαδέμικο"}, {"Académico de Viseu", "Académico"},
+            {"Vitória de Guimaraes", "Vitória SC"}, {"Γκόου Αχέντ Ιγκλς", "Γκόου Αχέντ"}, {"Φορτούνα Σιτάρντ", "Φορτούνα"},
+            {"Σπάρτα Ρότερνταμ", "Σπάρτα"}, {"Ουνιόν Σεν Ζιλουάζ", "Σεν Ζιλουάζ"}, {"Union St.-Gilloise", "Union SG"},
+            {"Λίνκολν Ρεντ Ιμπς", "Λίνκολν"}, {"Μπόρατς Μπάνια Λούκα", "Μπόρατς"}, {"Borac Banja Luka", "Borac"},
+            {"Heart of Midlothian", "Hearts"}, {"Istanbul Basaksehir", "Başakşehir"}, {"Σλόβαν Μπρατισλάβας", "Σλόβαν"},
+            {"Jagiellonia Bialystok", "Jagiellonia"}, {"Γκόλντεν Στέιτ Γουόριορς", "Γουόριορς"},
+            {"Athletic Club", "Athletic"}, {"Deportivo Alavés", "Alavés"}, {"C.D. Nacional", "Nacional"},
+            // MLS: the names fans and the league use, without "FC" / "SC" tails
+            {"Atlanta United FC", "Atlanta United"}, {"Chicago Fire FC", "Chicago Fire"}, {"Houston Dynamo FC", "Houston Dynamo"},
+            {"Minnesota United FC", "Minnesota United"}, {"Orlando City SC", "Orlando City"}, {"Inter Miami CF", "Inter Miami"},
+            {"New York City FC", "NYCFC"}, {"New England Revolution", "New England"}, {"Seattle Sounders FC", "Seattle Sounders"},
+            {"St. Louis CITY SC", "St. Louis City"}, {"Vancouver Whitecaps", "Whitecaps"}, {"Sporting Kansas City", "Sporting KC"},
+            // the NBA: the nickname, as fans say it
+            {"Atlanta Hawks", "Hawks"}, {"Boston Celtics", "Celtics"}, {"Brooklyn Nets", "Nets"}, {"Charlotte Hornets", "Hornets"},
+            {"Chicago Bulls", "Bulls"}, {"Cleveland Cavaliers", "Cavaliers"}, {"Dallas Mavericks", "Mavericks"},
+            {"Denver Nuggets", "Nuggets"}, {"Detroit Pistons", "Pistons"}, {"Golden State Warriors", "Warriors"},
+            {"Houston Rockets", "Rockets"}, {"Indiana Pacers", "Pacers"}, {"LA Clippers", "Clippers"}, {"Los Angeles Lakers", "Lakers"},
+            {"Memphis Grizzlies", "Grizzlies"}, {"Miami Heat", "Heat"}, {"Milwaukee Bucks", "Bucks"},
+            {"Minnesota Timberwolves", "Timberwolves"}, {"New Orleans Pelicans", "Pelicans"}, {"New York Knicks", "Knicks"},
+            {"Oklahoma City Thunder", "Thunder"}, {"Orlando Magic", "Magic"}, {"Philadelphia 76ers", "76ers"}, {"Phoenix Suns", "Suns"},
+            {"Portland Trail Blazers", "Trail Blazers"}, {"Sacramento Kings", "Kings"}, {"San Antonio Spurs", "Spurs"},
+            {"Toronto Raptors", "Raptors"}, {"Utah Jazz", "Jazz"}, {"Washington Wizards", "Wizards"},
+            {"Ατλάντα Χοκς", "Χοκς"}, {"Βοστώνη Σέλτικς", "Σέλτικς"}, {"Μπρούκλιν Νετς", "Νετς"}, {"Σάρλοτ Χόρνετς", "Χόρνετς"},
+            {"Σικάγο Μπουλς", "Μπουλς"}, {"Κλίβελαντ Καβαλίερς", "Καβαλίερς"}, {"Ντάλας Μάβερικς", "Μάβερικς"},
+            {"Ντένβερ Νάγκετς", "Νάγκετς"}, {"Ντιτρόιτ Πίστονς", "Πίστονς"}, {"Χιούστον Ρόκετς", "Ρόκετς"},
+            {"Ιντιάνα Πέισερς", "Πέισερς"}, {"Λος Άντζελες Κλίπερς", "Κλίπερς"}, {"Λος Άντζελες Λέικερς", "Λέικερς"},
+            {"Μέμφις Γκρίζλις", "Γκρίζλις"}, {"Μαϊάμι Χιτ", "Χιτ"}, {"Μιλγουόκι Μπακς", "Μπακς"},
+            {"Μινεσότα Τίμπεργουλβς", "Τίμπεργουλβς"}, {"Νέα Ορλεάνη Πέλικανς", "Πέλικανς"}, {"Νέα Υόρκη Νικς", "Νικς"},
+            {"Οκλαχόμα Σίτι Θάντερ", "Θάντερ"}, {"Ορλάντο Μάτζικ", "Μάτζικ"}, {"Φιλαδέλφεια Σίξερς", "Σίξερς"}, {"Φοίνιξ Σανς", "Σανς"},
+            {"Πόρτλαντ Μπλέιζερς", "Μπλέιζερς"}, {"Σακραμέντο Κινγκς", "Κινγκς"}, {"Σαν Αντόνιο Σπερς", "Σπερς"},
+            {"Τορόντο Ράπτορς", "Ράπτορς"}, {"Γιούτα Τζαζ", "Τζαζ"}, {"Ουάσιγκτον Ουίζαρντς", "Ουίζαρντς"}};
         for (String[] p : pairs) SHORT.put(p[0], p[1]);
     }
 
@@ -319,8 +518,19 @@ final class I18n {
         c.setTimeInMillis(t);
         int days = (int) Math.round((startOfDay(c) - startOfDay(now)) / 86400000.0);
         return days == 0 ? t("today") : days == 1 ? t("tomorrow") : days == -1 ? t("yesterday")
-            : new SimpleDateFormat(el() ? "EEE d/M" : "EEE d MMM", locale()).format(c.getTime());
+            : new SimpleDateFormat(el() ? "EEE d/M" : us ? "EEE, MMM d" : "EEE d MMM", el() || !us ? locale() : Locale.US).format(c.getTime());
     }
+
+    /** A viewer in the US or Canada, in English: "Sat, Nov 21" and "9:15 PM" (UK forms everywhere else). */
+    private static volatile boolean us = false;
+
+    static void region(String country) {
+        us = "US".equals(country) || "CA".equals(country);
+        greekViewer = country == null || "GR".equals(country) || "CY".equals(country);
+    }
+
+    /** A viewer in Greece or Cyprus: everything reads exactly as in Fanela 1.0. */
+    private static volatile boolean greekViewer = true;
 
     private static volatile boolean h24 = true;
 
@@ -329,10 +539,11 @@ final class I18n {
     static String longDate(long t) {
         String d = day(t);
         if (d.equals(t("today")) || d.equals(t("tomorrow")) || d.equals(t("yesterday"))) return d;
-        return new SimpleDateFormat(el() ? "EEEE d MMMM" : "EEEE d MMMM", locale()).format(new java.util.Date(t));
+        return new SimpleDateFormat(el() ? "EEEE d MMMM" : us ? "EEEE, MMMM d" : "EEEE d MMMM", el() || !us ? locale() : Locale.US)
+            .format(new java.util.Date(t));
     }
 
     static String time(long t) {
-        return new SimpleDateFormat(h24 ? "HH:mm" : "h:mm a", h24 ? Locale.US : locale()).format(new java.util.Date(t));
+        return new SimpleDateFormat(h24 ? "HH:mm" : "h:mm a", h24 || us && !el() ? Locale.US : locale()).format(new java.util.Date(t));
     }
 }

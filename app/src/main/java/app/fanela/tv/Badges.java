@@ -91,6 +91,9 @@ final class Badges {
         return Cards.key(I18n.enName(raw == null ? "" : raw)).replaceAll("[^A-Z0-9 ]", "").trim();
     }
 
+    /** True when the table has this team's colours (otherwise colors() picks one from the palette). */
+    static boolean known(String raw) { return match(COLORS, key(raw)) != null; }
+
     /** {fill, text} colours for a team. */
     static int[] colors(String raw) {
         String k = key(raw);

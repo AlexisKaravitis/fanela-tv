@@ -94,6 +94,12 @@ final class Channels {
         List<Logo> out = new ArrayList<>();
         if (!m.channelKnown || m.channel == null || m.channel.trim().isEmpty()) return out;
         String[] parts = m.channel.split("\\s*·\\s*");
+        if (Where.plain(m)) {  // outside the Greek sources: logos only when the listing gave one for every channel
+            String[] urls = m.channelLogo == null ? new String[0] : m.channelLogo.split("\\s*·\\s*");
+            if (urls.length != parts.length || parts.length > 3) return out;
+            for (String u : urls) { if (!u.startsWith("https://")) return new ArrayList<>(); out.add(new Logo(u, 0)); }
+            return out;
+        }
         Map<String, Logo> cat = catalog(c);
         for (int i = 0; i < parts.length && out.size() < 2; i++) {
             if (i == 0 && m.channelSure && m.channelLogo != null && !m.channelLogo.isEmpty()) { out.add(new Logo(m.channelLogo, m.channelNo)); continue; }

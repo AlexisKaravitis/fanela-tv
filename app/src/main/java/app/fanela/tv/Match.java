@@ -8,10 +8,10 @@ package app.fanela.tv;
 final class Match {
     String club;        // followed club (ESPN team id) this match belongs to
     String team;        // "FC" or "BC"
-    String source;      // espn | el | ec | tsdb | s24
+    String source;      // espn | el | ec | tsdb | s24 | nba
     String key;         // club|source-id, e.g. 435|espn:401896730
     String comp;        // competition code or label (I18n.comp)
-    String league;      // espn slug, "euroleague", "eurocup", "gbl", "gre.cup"
+    String league;      // espn slug (gre.1, eng.1, nba), "euroleague", "eurocup", "gbl", "gre.cup"
     String home, away;  // raw names
     boolean clubIsHome; // the followed club plays at home (from ids/codes, never from names)
     String hs, as;      // scores, null before the match
@@ -29,6 +29,8 @@ final class Match {
     String channelLogo;
     boolean channelSure;
     boolean channelKnown = true;
+    String listedBy = ""; // where the channel came from: "" Greek rights table / guides, "table" season table, "ronin",
+                          // "tv" the TV's own guide; "none": outside Greece and no source knows it
     long seenLiveAt;
     String homeId;      // home team's ESPN id while parsing (channel guess by id); not stored
 
@@ -63,13 +65,13 @@ final class Match {
         m.detail = detail; m.start = start; m.tbd = tbd; m.quarter = quarter; m.clubWon = clubWon; m.pens = pens;
         m.homeCrest = homeCrest; m.awayCrest = awayCrest; m.channel = channel; m.channelApp = channelApp;
         m.channelNo = channelNo; m.channelLogo = channelLogo; m.channelSure = channelSure;
-        m.channelKnown = channelKnown; m.seenLiveAt = seenLiveAt;
+        m.channelKnown = channelKnown; m.seenLiveAt = seenLiveAt; m.listedBy = listedBy;
         return m;
     }
 
     /** Everything that changes how the card looks (identical cards are not redrawn). */
     String signature() {
         return club + team + key + state + detail + hs + as + pens + clubWon + start + tbd + home + away + channel
-            + channelNo + channelSure + channelKnown + comp + homeCrest + awayCrest + channelLogo + clubIsHome;
+            + channelNo + channelSure + channelKnown + comp + homeCrest + awayCrest + channelLogo + clubIsHome + listedBy;
     }
 }

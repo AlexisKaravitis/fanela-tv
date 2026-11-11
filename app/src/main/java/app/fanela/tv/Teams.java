@@ -21,18 +21,39 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Super League clubs, keyed by ESPN id (never by name). The list is refreshed weekly from ESPN so promoted clubs appear
- * by themselves; followed clubs are remembered even if they leave the league, so they can always be unfollowed.
+ * Clubs, keyed by ESPN id (never by name). Super League clubs as before: the list is refreshed weekly from ESPN so
+ * promoted clubs appear by themselves. Other leagues (Leagues.ALL) are listed the same way, one file per league,
+ * fetched when the clubs picker first opens them. Followed clubs are remembered even if they leave their league, so they
+ * can always be unfollowed.
  * Basketball links: EuroLeague (E) / EuroCup (U) membership re-checked each season; TheSportsDB id from the table or
- * looked up once by name (a "not found" is only remembered after real answers, and expires).
+ * looked up once by name for Greek clubs (a "not found" is only remembered after real answers, and expires).
+ * Basketball-only clubs: NBA teams ("nba" + ESPN basketball id, which overlaps football ids) and EuroLeague / EuroCup
+ * clubs without a football side in the list ("el" + club code, lower case).
  */
 final class Teams {
     static final class Club {
         String id, name, crest, color, gr;
+        String league = "gre.1";  // the list the club was picked from: an ESPN slug, "nba", "euroleague" or "eurocup"
         String bcComp, bcCode, bcTsdb;
         boolean hasBasket;
         String rowKey() { return "club_" + id; }
         String label() { return I18n.el() ? gr : name; }
+        boolean nba() { return id.startsWith("nba"); }
+        boolean euroOnly() { return id.startsWith("el"); }
+        boolean basketOnly() { return nba() || euroOnly(); }
+        /** The ESPN id (football, or basketball for the NBA). */
+        String espnId() { return nba() ? id.substring(3) : id; }
+        /** The sport whose feed says whether the club's data is up to date. */
+        String mainTeam() { return basketOnly() ? "BC" : "FC"; }
+        /** The teams shown: football (and basketball when on and the club has a side), or basketball only. */
+        String[] teams(boolean basket) {
+            return basketOnly() ? new String[]{"BC"} : basket && hasBasket ? new String[]{"FC", "BC"} : new String[]{"FC"};
+        }
+        boolean shows(String team, boolean basket) {
+            for (String t : teams(basket)) if (t.equals(team)) return true;
+            return false;
+        }
+        boolean greek() { return "gre.1".equals(league) || GR_BY_ID.containsKey(id); }
     }
 
     /** id, English name, Greek name, colour. 2026-27 clubs, used until ESPN has answered once. */
@@ -52,18 +73,30 @@ final class Teams {
         for (String[] x : more) GR_BY_ID.put(x[0], x[1]);
     }
 
-    /** Basketball: ESPN id -> EuroLeague/EuroCup club code (or ""), TheSportsDB basketball id. */
+    /**
+     * Basketball: ESPN id -> EuroLeague/EuroCup club code (or ""), TheSportsDB basketball id (Greek clubs), the
+     * 2026-27 competition (E / U, known without a network call), the name in the EuroLeague / EuroCup grids, and the
+     * football league (a club followed from those grids is the football club, with its basketball side).
+     */
     static final String[][] BASKET = {
-        {"435", "OLY", "135635"}, {"443", "PAN", "135636"}, {"605", "PAO", "135637"}, {"11553", "ARI", "135628"},
-        {"887", "", "135626"}, {"2575", "", "137374"}};
+        {"435", "OLY", "135635", "E", "Olympiacos", "gre.1"}, {"443", "PAN", "135636", "E", "Panathinaikos", "gre.1"},
+        {"605", "PAO", "135637", "U", "PAOK", "gre.1"}, {"11553", "ARI", "135628", "U", "Aris", "gre.1"},
+        {"887", "", "135626", "", "AEK Athens", "gre.1"}, {"2575", "", "137374", "", "Iraklis", "gre.1"},
+        {"86", "MAD", "", "E", "Real Madrid", "esp.1"}, {"83", "BAR", "", "E", "Barcelona", "esp.1"},
+        {"132", "MUN", "", "E", "Bayern Munich", "ger.1"}, {"436", "ULK", "", "E", "Fenerbahce", "tur.1"},
+        {"1895", "BES", "", "E", "Besiktas", "tur.1"}};
 
     private static volatile List<Club> cache;
     private static volatile long cacheAt;
 
-    static List<Club> all(Context c) {
+    /** The Super League clubs and every followed club. */
+    static List<Club> all(Context c) { return withFollowed(c, greek(c), null); }
+
+    /** The Super League clubs. */
+    static List<Club> greek(Context c) {
         List<Club> cached = cache;
         File f = new File(c.getFilesDir(), "clubs.json");
-        if (cached != null && f.lastModified() <= cacheAt) return withFollowed(c, cached);
+        if (cached != null && f.lastModified() <= cacheAt) return cached;
         long mod = f.exists() ? f.lastModified() : 0;  // taken before reading, so a newer file is never missed
         List<Club> out = new ArrayList<>();
         try {
@@ -71,37 +104,53 @@ final class Teams {
                 JSONArray a = new JSONObject(read(f)).getJSONArray("clubs");
                 for (int i = 0; i < a.length(); i++) {
                     JSONObject o = a.getJSONObject(i);
-                    out.add(club(c, o.optString("id"), o.optString("name"), o.optString("crest"), o.optString("color")));
+                    out.add(club(c, o.optString("id"), o.optString("name"), o.optString("crest"), o.optString("color"), "gre.1"));
                 }
             }
         } catch (Exception ignored) { }
         if (out.isEmpty())
-            for (String[] x : FALLBACK) out.add(club(c, x[0], x[1], crestUrl(x[0]), x[3]));
+            for (String[] x : FALLBACK) out.add(club(c, x[0], x[1], crestUrl(x[0]), x[3], "gre.1"));
         cache = out;
         cacheAt = mod;
-        return withFollowed(c, out);
+        return out;
     }
 
     static String crestUrl(String id) { return "https://a.espncdn.com/i/teamlogos/soccer/500/" + id + ".png"; }
 
-    /** Adds followed clubs that are no longer in the league list (relegated), from what was saved when followed. */
-    private static List<Club> withFollowed(Context c, List<Club> list) {
+    /**
+     * Adds followed clubs that are not in the list (relegated, or from another league), from what was saved when they
+     * were followed. league: only those picked from that league (null: all).
+     */
+    private static List<Club> withFollowed(Context c, List<Club> list, String league) {
         Set<String> ids = new LinkedHashSet<>();
         for (Club k : list) ids.add(k.id);
         List<Club> out = new ArrayList<>(list);
-        SharedPreferences sp = c.getSharedPreferences("settings", Context.MODE_PRIVATE);
         for (String f : followed(c)) {
             if (ids.contains(f)) continue;
-            String name = sp.getString("meta_name_" + f, null);
-            if (name == null) for (String[] x : FALLBACK) if (x[0].equals(f)) name = x[1];
-            if (name != null) out.add(club(c, f, name, sp.getString("meta_crest_" + f, crestUrl(f)), "000000"));
+            Club k = fromMeta(c, f);
+            if (k != null && (league == null || league.equals(k.league))) out.add(k);
         }
         return out;
     }
 
+    /** A followed club from what was saved when it was followed (Greek clubs from before 1.1 saved no league). */
+    private static Club fromMeta(Context c, String id) {
+        SharedPreferences sp = c.getSharedPreferences("settings", Context.MODE_PRIVATE);
+        String name = sp.getString("meta_name_" + id, null);
+        if (name == null) for (String[] x : FALLBACK) if (x[0].equals(id)) name = x[1];
+        if (name == null) return null;
+        return club(c, id, name, sp.getString("meta_crest_" + id, crestUrl(id)), sp.getString("meta_color_" + id, "000000"),
+            sp.getString("meta_league_" + id, "gre.1"));
+    }
+
     /** Clubs for the settings grid: followed first, then alphabetical in the current language. */
-    static List<Club> sorted(Context c) {
-        List<Club> list = new ArrayList<>(all(c));
+    static List<Club> sorted(Context c) { return sorted(c, "gre.1"); }
+
+    /** One league's grid; null while its list has never been downloaded. */
+    static List<Club> sorted(Context c, String league) {
+        List<Club> base = "gre.1".equals(league) ? greek(c) : league(c, league);
+        if (base == null) return null;
+        List<Club> list = withFollowed(c, base, league);
         final Set<String> f = followed(c);
         final Collator col = Collator.getInstance(I18n.locale());
         Collections.sort(list, new Comparator<Club>() {
@@ -119,17 +168,21 @@ final class Teams {
         return null;
     }
 
-    private static Club club(Context c, String id, String name, String crest, String color) {
+    private static Club club(Context c, String id, String name, String crest, String color, String league) {
         Club k = new Club();
         k.id = id; k.name = name == null ? "" : name.trim(); k.crest = crest; k.color = color;
+        k.league = league == null || league.isEmpty() ? "gre.1" : league;
         String g = GR_BY_ID.get(id);
         k.gr = g != null ? g : I18n.grName(k.name);
         for (String[] b : BASKET) if (b[0].equals(id)) {
+            if (Leagues.get(k.league) != null && Leagues.get(k.league).basketball()) k.league = b[5];  // picked from a basketball grid
             k.hasBasket = true;
             k.bcCode = b[1].isEmpty() ? null : b[1];
             k.bcTsdb = b[2].isEmpty() ? null : b[2];
         }
-        if (!k.hasBasket) {  // a club outside the table whose basketball team was found by name (lookupBasket)
+        if (k.nba()) k.hasBasket = true;
+        if (k.euroOnly()) { k.hasBasket = true; k.bcCode = id.substring(2).toUpperCase(java.util.Locale.ROOT); }
+        if (!k.hasBasket && k.greek()) {  // a club outside the table whose basketball team was found by name (lookupBasket)
             String t = c.getSharedPreferences("settings", Context.MODE_PRIVATE).getString("tsdbbc_" + id, "");
             if (!t.isEmpty()) { k.hasBasket = true; k.bcTsdb = t; }
         }
@@ -146,7 +199,14 @@ final class Teams {
         if (v != null && !v.isEmpty()) return v;
         if (v != null) return null;  // checked: neither (re-checked weekly by resolveEuro)
         // Known for 2026-27 without a network call; other seasons are checked by resolveEuro() during a refresh.
-        if (season == 2026) return "435".equals(k.id) || "443".equals(k.id) ? "E" : "U";
+        String known = season == 2026 ? comp2026(k.id) : null;
+        if (known != null) return known;
+        if (k.euroOnly()) return "eurocup".equals(k.league) ? "U" : "E";  // the competition it was listed in
+        return null;
+    }
+
+    private static String comp2026(String id) {
+        for (String[] b : BASKET) if (b[0].equals(id) && !b[3].isEmpty()) return b[3];
         return null;
     }
 
@@ -156,7 +216,7 @@ final class Teams {
         SharedPreferences sp = c.getSharedPreferences("settings", Context.MODE_PRIVATE);
         int season = Sources.seasonOf(System.currentTimeMillis());
         String key = "euro_" + k.id + "_" + season;
-        if (season == 2026) return;
+        if (season == 2026 && comp2026(k.id) != null) return;
         String v = sp.getString(key, null);
         if (v != null && (!v.isEmpty() || System.currentTimeMillis() - sp.getLong(key + "_at", 0) < 7 * 86400000L)) return;
         int answered = 0;
@@ -197,6 +257,93 @@ final class Teams {
         } catch (Exception ignored) { }
     }
 
+    // ---------- other leagues ----------
+    private static final Map<String, List<Club>> leagues = new HashMap<>();
+    private static final Map<String, Long> leaguesAt = new HashMap<>();
+
+    private static File leagueFile(Context c, String league) { return new File(c.getFilesDir(), "clubs_" + league + ".json"); }
+
+    /** A league's clubs as last downloaded; null if never. */
+    static List<Club> league(Context c, String league) {
+        File f = leagueFile(c, league);
+        synchronized (leagues) {
+            List<Club> cached = leagues.get(league);
+            Long at = leaguesAt.get(league);
+            if (cached != null && at != null && f.lastModified() <= at) return cached;
+        }
+        if (!f.exists()) return null;
+        long mod = f.lastModified();
+        List<Club> out = new ArrayList<>();
+        try {
+            JSONArray a = new JSONObject(read(f)).getJSONArray("clubs");
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject o = a.getJSONObject(i);
+                out.add(club(c, o.optString("id"), o.optString("name"), o.optString("crest"), o.optString("color"), league));
+            }
+        } catch (Exception e) {
+            return null;
+        }
+        synchronized (leagues) { leagues.put(league, out); leaguesAt.put(league, mod); }
+        return out;
+    }
+
+    /** Downloads a league's clubs (weekly; force: now). Network, background thread. True when the list is on the TV. */
+    static boolean refreshLeague(Context c, String league, boolean force) {
+        if ("gre.1".equals(league)) { refresh(c); return true; }
+        Leagues.League lg = Leagues.get(league);
+        if (lg == null) return false;
+        File f = leagueFile(c, league);
+        if (!force && f.exists() && System.currentTimeMillis() - f.lastModified() < 7 * 86400000L) return true;
+        try {
+            JSONArray out = new JSONArray();
+            if (Leagues.EURO.equals(lg.sport)) {
+                String comp = "euroleague".equals(league) ? "E" : "U";
+                JSONArray d = new JSONObject(Net.http("https://api-live.euroleague.net/v2/competitions/" + comp + "/seasons/" + comp
+                    + Sources.seasonOf(System.currentTimeMillis()) + "/clubs")).getJSONArray("data");
+                for (int i = 0; i < d.length(); i++) {
+                    JSONObject t = d.getJSONObject(i);
+                    String code = t.optString("code").trim();
+                    if (!code.matches("[A-Z0-9]{2,5}")) continue;
+                    String linked = null, name = t.optString("abbreviatedName", t.optString("name")).trim();
+                    for (String[] b : BASKET) if (b[1].equals(code)) { linked = b[0]; name = b[4]; }  // the club's football side
+                    JSONObject img = t.optJSONObject("images");
+                    out.put(new JSONObject().put("id", linked != null ? linked : "el" + code.toLowerCase(java.util.Locale.ROOT)).put("name", name)
+                        .put("crest", linked != null ? crestUrl(linked) : img == null ? "" : img.optString("crest", "")).put("color", ""));
+                }
+            } else {
+                boolean nba = Leagues.NBA.equals(lg.sport);
+                JSONObject d = new JSONObject(Net.http("https://site.api.espn.com/apis/site/v2/sports/"
+                    + (nba ? "basketball/nba" : "soccer/" + league) + "/teams"));
+                JSONArray teams = d.getJSONArray("sports").getJSONObject(0).getJSONArray("leagues").getJSONObject(0).getJSONArray("teams");
+                for (int i = 0; i < teams.length(); i++) {
+                    JSONObject t = teams.getJSONObject(i).getJSONObject("team");
+                    if (t.optString("id").isEmpty() || t.optString("displayName").isEmpty() || !t.optBoolean("isActive", true)) continue;
+                    if (t.optString("displayName").trim().matches("(?i)TBD( .*)?")) continue;  // ESPN's "TBD Home" / "TBD Away" placeholders
+                    JSONArray logos = t.optJSONArray("logos");
+                    String crest = logos != null && logos.length() > 0 ? logos.getJSONObject(0).optString("href") : "";
+                    out.put(new JSONObject().put("id", (nba ? "nba" : "") + t.optString("id")).put("name", t.optString("displayName").trim())
+                        .put("crest", crest.isEmpty() && !nba ? crestUrl(t.optString("id")) : crest).put("color", t.optString("color")));
+                }
+            }
+            if (out.length() < 8) return f.exists();
+            Store.writeAtomic(f, new JSONObject().put("clubs", out).toString());
+            return true;
+        } catch (Exception e) {
+            return f.exists();
+        }
+    }
+
+    /** A club from any list on the TV (a picker tile, a demo); followed clubs as in get(). */
+    static Club find(Context c, String id) {
+        Club k = get(c, id);
+        if (k != null) return k;
+        for (Leagues.League l : Leagues.ALL) {
+            List<Club> list = "gre.1".equals(l.id) ? null : league(c, l.id);
+            if (list != null) for (Club x : list) if (x.id.equals(id)) return x;
+        }
+        return null;
+    }
+
     // ---------- follows ----------
     static Set<String> followed(Context c) {
         String s = c.getSharedPreferences("settings", Context.MODE_PRIVATE).getString("follow", "");
@@ -209,7 +356,8 @@ final class Teams {
         StringBuilder b = new StringBuilder();
         for (String x : ids) { if (b.length() > 0) b.append(','); b.append(x); }
         SharedPreferences.Editor ed = c.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString("follow", b.toString());
-        if (justFollowed != null) ed.putString("meta_name_" + justFollowed.id, justFollowed.name).putString("meta_crest_" + justFollowed.id, justFollowed.crest);
+        if (justFollowed != null) ed.putString("meta_name_" + justFollowed.id, justFollowed.name).putString("meta_crest_" + justFollowed.id, justFollowed.crest)
+            .putString("meta_league_" + justFollowed.id, justFollowed.league).putString("meta_color_" + justFollowed.id, justFollowed.color == null ? "" : justFollowed.color);
         ed.commit();
         if (justFollowed != null)  // fetch it on the next refresh, even if it was followed (and fetched) a moment ago
             c.getSharedPreferences("engine", Context.MODE_PRIVATE).edit().remove("lastFull_" + justFollowed.id).remove("sig_" + justFollowed.id).commit();
@@ -238,13 +386,13 @@ final class Teams {
     /** TheSportsDB basketball id; table first, then a name lookup remembered for 30 days (only after real answers). */
     static String tsdbBasket(Context c, Club k) {
         if (k.bcTsdb != null) return k.bcTsdb;
-        if (!k.hasBasket) return null;
+        if (!k.hasBasket || !k.greek()) return null;  // TheSportsDB is searched for Greek basketball teams only
         return lookup(c, k);
     }
 
     /** For clubs outside the basketball table (e.g. newly promoted): looks for a Greek basketball team of the same name. */
     static void lookupBasket(Context c, Club k) {
-        if (k.hasBasket) return;
+        if (k.hasBasket || !k.greek()) return;
         if (lookup(c, k) != null) cache = null;
     }
 

@@ -57,7 +57,11 @@ final class Ui {
             if (k != null) {
                 int[] col = Badges.colors(k.name);
                 fill = Color.luminance(col[0]) < 0.03f ? col[1] : col[0];
-                int[] shirt = Logo.shirt(col, null);
+                if (!Badges.known(k.name) && k.color != null && k.color.matches("[0-9a-fA-F]{6}")) {  // the feed's own club colour
+                    int espn = Color.parseColor("#" + k.color);
+                    fill = Color.luminance(espn) < 0.03f ? Color.WHITE : espn;
+                }
+                int[] shirt = Logo.shirt(Badges.known(k.name) ? col : null, k.color);
                 logoFill = 0xFF000000 | shirt[0];
                 logoTrim = 0xFF000000 | shirt[1];
             }

@@ -65,10 +65,23 @@ final class Cards {
 
     /** Where to watch. lineStart: the text starts a line (capital first letter), not mid-sentence. */
     static String where(Match m, boolean lineStart) {
-        if (!m.channelKnown) return I18n.t("channel_tba");
+        if (!m.channelKnown) return I18n.t(Where.noData(m) ? "check_guide" : "channel_tba");
+        if (Where.plain(m)) {  // "Usually on Sky Sports / TNT Sports" (season table), "On Sky Sports Main Event" (a listing)
+            String names = String.join(" / ", names(m));
+            return I18n.f((m.channelSure ? "on_channels" : "usually_on") + (lineStart ? "_cap" : ""), names);
+        }
         // one pattern everywhere: "Novasports Prime 318 · Magenta TV", or "Likely: Magenta Sport · Magenta TV"
         if (m.channelSure) return chan(m.channel) + (m.channelNo > 0 ? " " + m.channelNo : "") + " · " + appName(m.channelApp);
         return I18n.t(lineStart ? "likely_channel_cap" : "likely_channel") + ": " + chan(m.channel) + " · " + appName(m.channelApp);
+    }
+
+    /** The channels of a match, one name each ("Sky Sports · TNT Sports"), at most three; the TV's own guide adds the number. */
+    static List<String> names(Match m) {
+        List<String> out = new ArrayList<>();
+        if (m.channel == null) return out;
+        for (String s : m.channel.split("\\s*·\\s*")) if (!s.trim().isEmpty() && out.size() < 3) out.add(chan(s.trim()));
+        if ("tv".equals(m.listedBy) && m.channelNo > 0 && !out.isEmpty()) out.set(0, out.get(0) + " " + m.channelNo);
+        return out;
     }
 
     /** Channel names as the guides write them (Greek), in Latin letters for the English interface. */
@@ -88,7 +101,7 @@ final class Cards {
         Match pre = null, off = null;
         for (Match m : all) {
             if (!club.equals(m.club) || !team.equals(m.team)) continue;
-            boolean coming = m.start >= now - 3 * 3600000L || (m.tbd && Store.sameAthensDay(m.start, now));  // a TBA game: all its day
+            boolean coming = m.start >= now - 3 * 3600000L || (m.tbd && Store.sameViewerDay(m.start, now));  // a TBA game: all its day
             if ("pre".equals(m.state) && coming && (pre == null || m.start < pre.start)) pre = m;
             if ("off".equals(m.state) && m.start >= now - 12 * 3600000L && (off == null || m.start < off.start)) off = m;
         }
@@ -207,6 +220,27 @@ final class Cards {
         return w;
     }
 
+    /**
+     * Both club names in one size, the largest both fit at, never below 30 px: a longer name goes onto two lines
+     * instead of shrinking out of reach from the sofa.
+     */
+    static void drawNames(Canvas cv, Paint p, String home, String away, float y, float maxW, float size) {
+        p.setTextSize(size);
+        while (Math.max(p.measureText(home), p.measureText(away)) > maxW && size > 30) p.setTextSize(size -= 2);
+        p.setTextAlign(Paint.Align.CENTER);
+        String[][] both = {{home, "190"}, {away, "770"}};
+        for (String[] n : both) {
+            float cx = Float.parseFloat(n[1]);
+            int sp = n[0].indexOf(' ', n[0].length() / 2) >= 0 ? n[0].indexOf(' ', n[0].length() / 2) : n[0].lastIndexOf(' ');
+            if (p.measureText(n[0]) <= maxW || sp < 0) { fitText(cv, p, n[0], cx, y, maxW, size); p.setTextAlign(Paint.Align.CENTER); continue; }
+            float lh = size * 1.02f;  // two lines, the first a little higher
+            fitText(cv, p, n[0].substring(0, sp), cx, y - lh / 2, maxW, size);
+            fitText(cv, p, n[0].substring(sp + 1), cx, y + lh / 2, maxW, size);
+            p.setTextAlign(Paint.Align.CENTER);
+        }
+        p.setTextAlign(Paint.Align.LEFT);
+    }
+
     static void fitText(Canvas cv, Paint p, String s, float cx, float y, float maxW, float size) {
         p.setTextSize(size);
         while (p.measureText(s) > maxW && size > 16) p.setTextSize(size -= 2);
@@ -300,8 +334,10 @@ final class Cards {
         badge(cv, Net.image(c, m.awayCrest), m.away, 770, 228, cr);
         p.setColor(Color.WHITE);
         p.setTypeface(face("sans-serif-condensed", Typeface.BOLD));
-        fitText(cv, p, caps(I18n.shortTeam(m.home)), 190, tv ? 392 : 372, tv ? 350 : 300, tv ? 54 : 38);
-        fitText(cv, p, caps(I18n.shortTeam(m.away)), 770, tv ? 392 : 372, tv ? 350 : 300, tv ? 54 : 38);
+        if (Where.greek(Where.country())) {  // Greece: exactly as Fanela 1.0 draws them
+            fitText(cv, p, caps(I18n.shortTeam(m.home)), 190, tv ? 392 : 372, tv ? 350 : 300, tv ? 54 : 38);
+            fitText(cv, p, caps(I18n.shortTeam(m.away)), 770, tv ? 392 : 372, tv ? 350 : 300, tv ? 54 : 38);
+        } else drawNames(cv, p, caps(I18n.shortTeam(m.home)), caps(I18n.shortTeam(m.away)), tv ? 392 : 372, tv ? 350 : 300, tv ? 54 : 38);
 
         float cy = 228;
         if (m.hasScore() && (live || done)) {
@@ -361,10 +397,12 @@ final class Cards {
         if (!m.channelKnown) {
             t.setTypeface(face("sans-serif-medium", Typeface.NORMAL));
             t.setColor(Color.rgb(150, 156, 168));
-            fitText(cv, t, caps(I18n.t("channel_tba")), W / 2f, tv ? 490 : 482, 860, tv ? 46 : 34);
+            boolean gr = Where.greek(Where.country());  // Greece: "to be announced" as Fanela 1.0 draws it
+            fitText(cv, t, caps(I18n.t(Where.noData(m) ? "check_guide" : "channel_tba")), W / 2f, tv ? 490 : gr ? 482 : 486, 860, tv ? 46 : gr ? 34 : 42);
             return;
         }
         List<Channels.Logo> logos = Channels.logos(c, m);
+        if (Where.plain(m) && logos.isEmpty()) { drawPills(cv, m); return; }
         List<Bitmap> imgs = new ArrayList<>();
         for (Channels.Logo l : logos) {
             Bitmap b = trim(Net.image(c, l.url));
@@ -438,6 +476,47 @@ final class Cards {
             cv.drawBitmap(r, x0, 470 - h / 2, null);
         }
         cv.drawText(label, x0 + w + (w > 0 ? 20 : 0), 482, t);
+    }
+
+    /**
+     * Channel names as text pills ("USUALLY ON  [SKY SPORTS]  [TNT SPORTS]"), for countries where Fanela has no logos.
+     * A season-table guess is drawn a little softer, like the Greek "likely" logos.
+     */
+    static void drawPills(Canvas cv, Match m) {
+        List<String> names = names(m);
+        if (names.isEmpty()) return;
+        String lead = m.channelSure ? "" : caps(I18n.t("usually"));
+        Paint t = new Paint(Paint.ANTI_ALIAS_FLAG);
+        t.setTypeface(face("sans-serif-medium", Typeface.NORMAL));
+        t.setTextSize(36);
+        t.setColor(Color.rgb(160, 166, 178));
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setTypeface(face("sans-serif", Typeface.BOLD));
+        p.setTextSize(34);
+        p.setColor(m.channelSure ? Color.WHITE : Color.rgb(222, 225, 231));
+        float pad = 24, h = 60, gap = 14, y = 470;
+        float[] w = new float[names.size()];
+        float total = lead.isEmpty() ? 0 : t.measureText(lead) + 22;
+        for (int i = 0; i < names.size(); i++) {
+            w[i] = p.measureText(caps(names.get(i))) + 2 * pad;
+            total += w[i] + (i > 0 ? gap : 0);
+        }
+        float scale = total > 880 ? 880 / total : 1f;  // never wider than the card
+        cv.save();
+        cv.scale(scale, scale, W / 2f, y);
+        float x = W / 2f - total / 2;
+        Rect r = new Rect();
+        p.getTextBounds("A", 0, 1, r);
+        if (!lead.isEmpty()) { cv.drawText(lead, x, y + r.height() / 2f, t); x += t.measureText(lead) + 22; }
+        Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
+        bg.setColor(Color.argb(m.channelSure ? 56 : 40, 255, 255, 255));
+        for (int i = 0; i < names.size(); i++) {
+            if (i > 0) x += gap;
+            cv.drawRoundRect(new RectF(x, y - h / 2, x + w[i], y + h / 2), h / 2, h / 2, bg);
+            cv.drawText(caps(names.get(i)), x + pad, y + r.height() / 2f, p);
+            x += w[i];
+        }
+        cv.restore();
     }
 
     static void saveAtomic(Context c, Bitmap big, String name) throws Exception {
@@ -555,7 +634,7 @@ final class Cards {
     static List<Match> upcoming(List<Match> all, String club, String team, Match skip, long now, int max) {
         List<Match> out = new ArrayList<>();
         for (Match m : all)
-            if (club.equals(m.club) && team.equals(m.team) && "pre".equals(m.state) && (m.start > now || (m.tbd && Store.sameAthensDay(m.start, now)))
+            if (club.equals(m.club) && team.equals(m.team) && "pre".equals(m.state) && (m.start > now || (m.tbd && Store.sameViewerDay(m.start, now)))
                 && (skip == null || !m.key.equals(skip.key))) out.add(m);
         java.util.Collections.sort(out, new java.util.Comparator<Match>() {
             public int compare(Match a, Match b) { return Long.compare(a.start, b.start); }
@@ -580,8 +659,7 @@ final class Cards {
      */
     static List<Ref> forApp(Context c, Teams.Club k, List<Match> all) {
         long now = System.currentTimeMillis();
-        boolean basket = Teams.basketball(c) && k.hasBasket;
-        String[] teams = basket ? new String[]{"FC", "BC"} : new String[]{"FC"};
+        String[] teams = k.teams(Teams.basketball(c));
         List<Ref> coming = new ArrayList<>(), done = new ArrayList<>();
         for (String team : teams) {
             String t = "c" + k.id + "_" + team.toLowerCase(Locale.US);
@@ -636,12 +714,12 @@ final class Cards {
         SharedPreferences sp = c.getSharedPreferences("cards", Context.MODE_PRIVATE);
         List<HomeRows.Tile> tiles = new ArrayList<>();
         StringBuilder rowSig = new StringBuilder();
-        boolean basket = Teams.basketball(c) && k.hasBasket;
+        boolean basket = Teams.basketball(c);
         for (int pass = 0; pass < 2; pass++) {
             boolean last = pass == 1;
             List<Ref> refs = new ArrayList<>();
             for (String team : new String[]{"FC", "BC"}) {
-                if ("BC".equals(team) && !basket) continue;
+                if (!k.shows(team, basket)) continue;
                 Match m = last ? pickLast(all, k.id, team) : pickNow(all, k.id, team, now);
                 if (m == null) continue;
                 add(refs, ensure(c, k, m, "c" + k.id + "_" + team.toLowerCase(Locale.US) + (last ? "_tvlast" : "_tvnow"), last, now));
@@ -671,30 +749,34 @@ final class Cards {
     }
 
     /** Sample cards for every state (design checks), for the first followed club: demo_*.png. */
-    static void demo(Context c) { demo(c, null, null, "demo_"); }
+    static void demo(Context c) { demo(c, null, null, null, "demo_"); }
 
     /**
      * Sample cards for any club and language without changing the user's settings (design checks):
      * a club that is not followed is fetched once for the demo only (nothing is stored).
      */
-    static void demo(Context c, String clubId, String lang, String prefix) {
+    static void demo(Context c, String clubId, String lang, String country, String prefix) {
         I18n.load(c);
         List<Match> all = Engine.refresh(c, false);
         if (lang != null) I18n.use(lang);
+        if (country != null) Where.use(country);  // this thread only: the setting is not touched
         long now = System.currentTimeMillis();
         String club = clubId;
         if (club == null) {
             if (Teams.followed(c).isEmpty()) return;
             club = Teams.followed(c).iterator().next();
-        } else if (!Teams.followed(c).contains(club)) {
-            Teams.Club k = Teams.get(c, club);
+        } else if (!Teams.followed(c).contains(club) || country != null) {
+            Teams.Club k = Teams.find(c, club);
             if (k == null) return;
             all = new ArrayList<>();
             for (Sources.Result r : Sources.fetch(c, k, true)) all.addAll(r.list);
             Channels.load(c);
-            List<Guide.Airing> s24 = Guide.sport24(c);
-            all.addAll(Guide.discover(all, s24, k, true));
-            Guide.apply(all, k, Guide.magenta(c, k, all), s24, Sofa.airings(c, k, all, true));
+            List<Watch> ws = Where.providers(c, Where.country());
+            for (Watch w : ws) w.prepare(c);
+            GreeceProvider g = Where.greece(ws);
+            List<Match> found = g == null ? null : g.discover(all, k, true);
+            if (found != null) all.addAll(found);
+            for (Watch w : ws) w.apply(all, k, w.fetch(c, k, all, true));
             Crests.resolve(c, all);
             Crests.fill(c, all);
             Engine.timeStates(all, now);

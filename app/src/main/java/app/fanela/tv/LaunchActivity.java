@@ -10,6 +10,7 @@ import android.os.Bundle;
  * tasks started from a disabled alias; the main screen's task starts here from an explicit intent instead, so a tile
  * switch can never close the app while someone is using it.
  */
+@android.annotation.SuppressLint("CustomSplashScreen")  // not a splash screen: it shows nothing and hands over at once
 public class LaunchActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);

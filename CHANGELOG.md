@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.1.0 (11 November 2026)
+
+Fanela now also follows clubs and leagues outside Greece. In Greece it works and looks exactly as before. Updating
+from 1.0 keeps your clubs, language, favourite club, rows and tile colour, and sets the country to Greece.
+Version 1.0.5 was never released; its fix is in this one.
+
+**New**
+- **Clubs from 18 more competitions**, picked league by league: the Premier League, LaLiga, Serie A, Bundesliga,
+  Ligue 1, Liga Portugal, Eredivisie, Süper Lig, MLS, Brasileirão, Argentine Primera, Saudi Pro League, the three UEFA
+  cups, the NBA, the EuroLeague and the EuroCup. Cup and European games come with the club.
+- **Country** in Settings and at the first start. It starts as the TV's own and decides where-to-watch and which
+  leagues come first.
+- **Where to watch outside Greece:** "Usually on Sky Sports / TNT Sports" and the like, from the leagues', UEFA's,
+  the NBA's and EuroLeague's own broadcaster lists for 14 countries, with Wikipedia's lists filling gaps. When no
+  official list exists, the card says "Check your provider's guide".
+- **Sources and credits** lists every source and the date each competition's TV partners were last checked.
+- **Greek names for the clubs of every league**, so a Greek grid never mixes alphabets (MLS, Brazilian, Argentine and
+  Saudi clubs keep their own names).
+- Viewers in the US and Canada get "Sat, Nov 21" and "7:30 PM".
+
+**Better**
+- Leagues sit in a row above the clubs, football then basketball; resting on one shows its clubs, and a badge counts
+  the clubs you follow in it.
+- The first start asks for language and country first, and has a Done button at the top.
+- The country picker lists the TV's own country first, in three columns.
+- Club tiles never split a name mid-word and sort by the name they show; short names for NBA and MLS clubs.
+- "Favourite club" rather than "Favourite team".
+
+**Fixed**
+- Club rows scrolling up slide under the header instead of drawing over it (1.0.5's fix).
+- On a first start the focus is on the screen straight away, so the remote works at once.
+- Upcoming NBA games are no longer dropped.
+
 ## 1.0.4 (10 November 2026)
 
 The first release since 1.0.0. Versions 1.0.1 to 1.0.3 were test builds.

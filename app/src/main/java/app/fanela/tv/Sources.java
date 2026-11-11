@@ -14,9 +14,9 @@ import org.json.JSONObject;
 
 /**
  * Fixtures and scores for one followed club. Each fetch reports whether it fully succeeded, so a failing feed keeps
- * its last good matches (Store). Sources: ESPN (football, every competition ESPN covers), EuroLeague / EuroCup official
- * API (basketball), TheSportsDB next/last (Greek Basket League / BCL clubs). Missing cup / basketball games are added
- * from the Sport24 TV guide (Guide.discover).
+ * its last good matches (Store). Sources: ESPN (football, every competition ESPN covers; the NBA), EuroLeague / EuroCup
+ * official API (basketball), TheSportsDB next/last (Greek Basket League / BCL clubs). Missing Greek cup / basketball
+ * games are added from the Sport24 TV guide (Guide.discover). The expected channel is set while parsing (Where.guess).
  */
 final class Sources {
     static final class Result {
@@ -28,6 +28,12 @@ final class Sources {
 
     static List<Result> fetch(Context c, Teams.Club k, boolean basket) {
         List<Result> r = new ArrayList<>();
+        if (k.nba()) { r.add(nba(k)); return r; }
+        if (k.euroOnly()) {  // basketball only, whatever the basketball setting says
+            if (k.bcComp != null) r.add(euro(k));
+            else { Result none = new Result("el"); none.ok = true; r.add(none); }  // in neither competition this season
+            return r;
+        }
         r.add(espn(k));
         if (basket && k.hasBasket) {
             boolean euroGames = false;
@@ -67,8 +73,9 @@ final class Sources {
         Map<String, Match> seen = new LinkedHashMap<>();
         boolean a = espnSchedule(k, "all", "?fixture=true", seen), b = espnSchedule(k, "all", "", seen);
         r.ok = a && b;
-        if (!a) espnSchedule(k, "gre.1", "?fixture=true", seen);  // fallback: at least the league
-        if (!b) espnSchedule(k, "gre.1", "", seen);
+        String lg = Leagues.get(k.league) != null && !Leagues.get(k.league).basketball() ? k.league : "gre.1";
+        if (!a) espnSchedule(k, lg, "?fixture=true", seen);  // fallback: at least the league
+        if (!b) espnSchedule(k, lg, "", seen);
         r.list.addAll(seen.values());
         return r;
     }
@@ -149,8 +156,9 @@ final class Sources {
             if ("pre".equals(m.state) || ("off".equals(m.state) && !name.contains("ABANDONED"))) s = null;
             boolean home = "home".equals(x.optString("homeAway"));
             boolean mine = clubId.equals(tm.optString("id"));
-            Boolean winner = x.has("winner") ? x.optBoolean("winner") : (sc instanceof JSONObject && ((JSONObject) sc).has("winner")
-                ? ((JSONObject) sc).optBoolean("winner") : null);
+            // boxed on purpose: a game not played yet may have no "winner" at all (NBA), and boolean ? : null unboxes to a crash
+            Boolean winner = x.has("winner") ? Boolean.valueOf(x.optBoolean("winner")) : sc instanceof JSONObject && ((JSONObject) sc).has("winner")
+                ? Boolean.valueOf(((JSONObject) sc).optBoolean("winner")) : null;
             if (home) { m.home = nm; m.hs = s; m.homeCrest = crest; hp = shootout(x); m.clubIsHome = mine; m.homeId = tm.optString("id"); }
             else { m.away = nm; m.as = s; m.awayCrest = crest; ap = shootout(x); }
             if (mine) clubWinner = winner; else oppWinner = winner;
@@ -164,7 +172,7 @@ final class Sources {
                 m.clubWon = Integer.compare(m.clubHome() ? ph : pa, m.clubHome() ? pa : ph);
             } else m.clubWon = Integer.compare(Match.toInt(m.clubScore()), Match.toInt(m.oppScore()));
         }
-        Cards.channelGuess(m);
+        Where.guess(m);
         return m;
     }
 
@@ -180,6 +188,59 @@ final class Sources {
                 for (int i = 0; ev != null && i < ev.length(); i++)
                     if (id.equals(ev.getJSONObject(i).optString("id"))) {
                         Match n = espn(ev.getJSONObject(i), m.league, m.club);
+                        if (n != null) return n;
+                    }
+            } catch (Exception ignored) { }
+        }
+        return null;
+    }
+
+    // ---------- basketball: NBA (ESPN) ----------
+    static Result nba(Teams.Club k) {
+        Result r = new Result("nba");
+        try {
+            JSONObject d = new JSONObject(Net.http("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/" + k.espnId() + "/schedule"));
+            JSONArray ev = d.optJSONArray("events");
+            if (ev == null) return r;
+            for (int i = 0; i < ev.length(); i++) {
+                try { Match m = nbaEvent(ev.getJSONObject(i), k.id); if (m != null) r.list.add(m); } catch (Exception ignored) { }
+            }
+            r.ok = ev.length() == 0 || !r.list.isEmpty();
+        } catch (Exception ignored) { }
+        return r;
+    }
+
+    /** An NBA game from ESPN's schedule or scoreboard; club is the followed club's id ("nba13"). */
+    static Match nbaEvent(JSONObject e, String club) throws Exception {
+        Match m = espn(e, "nba", club.substring(3));
+        if (m == null) return null;
+        m.club = club; m.team = "BC"; m.source = "nba"; m.league = "nba"; m.comp = "nba";
+        m.key = club + "|nba:" + e.optString("id");
+        JSONObject st = e.getJSONArray("competitions").getJSONObject(0).getJSONObject("status");
+        String name = st.getJSONObject("type").optString("name", ""), sd = st.getJSONObject("type").optString("shortDetail", "");
+        if ("in".equals(m.state) && !"SUSPENDED".equals(m.detail)) {
+            int p = st.optInt("period");
+            String clock = st.optString("displayClock", "").trim();
+            m.quarter = p;
+            if (name.contains("HALFTIME")) m.detail = "HT";
+            else if (name.contains("END_PERIOD")) m.detail = "BREAK";
+            else m.detail = (p > 4 ? "OT" + (p - 4 > 1 ? (p - 4) : "") : "Q" + Math.max(1, p)) + (clock.isEmpty() ? "" : " " + clock);
+        } else if ("post".equals(m.state)) m.detail = sd.contains("OT") ? "FT_AET" : "FT";
+        return m;
+    }
+
+    /** Live refresh of one NBA game from the scoreboard (ESPN dates are US days: the UTC date, then the day before). */
+    static Match nbaLive(Match m) {
+        SimpleDateFormat f = new SimpleDateFormat("yyyyMMdd", Locale.US);
+        f.setTimeZone(TimeZone.getTimeZone("UTC"));
+        String id = m.key.substring(m.key.indexOf("nba:") + 4);
+        for (long day : new long[]{m.start, m.start - 86400000L}) {
+            try {
+                JSONArray ev = new JSONObject(Net.httpLive("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates="
+                    + f.format(day))).optJSONArray("events");
+                for (int i = 0; ev != null && i < ev.length(); i++)
+                    if (id.equals(ev.getJSONObject(i).optString("id"))) {
+                        Match n = nbaEvent(ev.getJSONObject(i), m.club);
                         if (n != null) return n;
                     }
             } catch (Exception ignored) { }
@@ -223,7 +284,7 @@ final class Sources {
                         m.detail = "FT";
                         m.clubWon = Integer.compare(Match.toInt(m.clubScore()), Match.toInt(m.oppScore()));
                     } else m.state = "pre";
-                    Cards.channelGuess(m);
+                    Where.guess(m);
                     r.list.add(m);
                 } catch (Exception ignored) { }
             }
@@ -295,7 +356,7 @@ final class Sources {
                         Match m = tsdb(e, k.id, tid);
                         m.comp = comp;
                         m.league = comp.startsWith("gbl") ? "gbl" : comp;
-                        Cards.channelGuess(m);
+                        Where.guess(m);
                         r.list.add(m);
                     } catch (Exception ignored) { }
                 }

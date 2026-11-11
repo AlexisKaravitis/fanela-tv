@@ -27,7 +27,7 @@ import java.util.Set;
  * restores it in place without asking again; after that it is deleted.
  */
 final class HomeRows {
-    static final String ART = "v2";  // logo art version: a new value makes the launcher reload the row logos
+    static final String ART = "v3";  // logo art version: a new value makes the launcher reload the row logos
     static final long KEEP_HIDDEN = 7 * 86400000L;
     static final String CLASSIC_LAUNCHER = "com.google.android.tvlauncher";
 
@@ -66,6 +66,7 @@ final class HomeRows {
     }
 
     static boolean installed(Context c, String pkg) {
+        if (pkg == null || pkg.isEmpty()) return false;
         PackageManager pm = c.getPackageManager();
         return pm.getLeanbackLaunchIntentForPackage(pkg) != null || pm.getLaunchIntentForPackage(pkg) != null;
     }
