@@ -136,29 +136,8 @@ final class Guide {
                 okDays++;
                 for (int i = 0; i < a.length(); i++) {
                     try {
-                        JSONObject e = a.getJSONObject(i);
-                        JSONObject ch = e.optJSONObject("channel");
-                        String chName = ch == null ? "" : clean(ch.optString("name"));
-                        if (chName.isEmpty()) continue;
-                        Airing x = new Airing();
-                        x.id = e.optString("id");
-                        x.title = e.optString("title").trim();
-                        x.start = ts.parse(e.optString("scheduleDate")).getTime();
-                        x.channel = chName;
-                        x.live = true;
-                        x.genre = "";
-                        x.tag = "";
-                        JSONArray tags = e.optJSONArray("tags");
-                        for (int t = 0; tags != null && t < tags.length(); t++) {
-                            String n = tags.getJSONObject(t).optString("name"), dn = tags.getJSONObject(t).optString("displayName");
-                            if ("basket".equals(n)) x.genre = "Basketball";
-                            else if ("podosfairo".equals(n)) x.genre = "Football";
-                            else if (x.tag.isEmpty()) x.tag = dn;
-                        }
-                        String tk = Cards.key(x.tag);
-                        if ("Basketball".equals(x.genre) && tk.contains("SUPER LEAGUE") && !tk.contains("BASKET") && !tk.contains("GBL"))
-                            x.genre = "Football";  // Sport24 sometimes tags a Super League simulcast as basketball
-                        if (!x.genre.isEmpty()) out.add(x);  // football and basketball only
+                        Airing x = sport24Airing(a.getJSONObject(i), ts);
+                        if (x != null) out.add(x);
                     } catch (Exception ignored) { }
                 }
             } catch (Exception ignored) { }
@@ -173,6 +152,40 @@ final class Guide {
         }
         save(c, "guide_sport24.json", out, okDays == 9 ? now : now - TTL / 2);
         return out;
+    }
+
+    /**
+     * One Sport24 listing as an Airing, or null when Fanela has no use for it. Kept: football and basketball (the clubs'
+     * guide, Guide.find / discover), and motor sport and martial arts (F1 and UFC, SportWhere). Guide.find and discover
+     * only ever take Football and Basketball airings, so the other two never reach a club's match.
+     */
+    static Airing sport24Airing(JSONObject e, SimpleDateFormat ts) throws Exception {
+        JSONObject ch = e.optJSONObject("channel");
+        String chName = ch == null ? "" : clean(ch.optString("name"));
+        if (chName.isEmpty()) return null;
+        Airing x = new Airing();
+        x.id = e.optString("id");
+        x.title = e.optString("title").trim();
+        x.start = ts.parse(e.optString("scheduleDate")).getTime();
+        x.channel = chName;
+        x.live = true;
+        x.genre = "";
+        x.tag = "";
+        String other = "";  // F1 / UFC: only when no football or basketball tag
+        JSONArray tags = e.optJSONArray("tags");
+        for (int t = 0; tags != null && t < tags.length(); t++) {
+            String n = tags.getJSONObject(t).optString("name"), dn = tags.getJSONObject(t).optString("displayName");
+            if ("basket".equals(n)) x.genre = "Basketball";
+            else if ("podosfairo".equals(n)) x.genre = "Football";
+            else if ("mixanokinitos-athlitismos".equals(n)) other = SportWhere.GENRE_MOTOR;
+            else if ("polemikes-texnes".equals(n)) other = SportWhere.GENRE_COMBAT;
+            else if (x.tag.isEmpty()) x.tag = dn;
+        }
+        String tk = Cards.key(x.tag);
+        if ("Basketball".equals(x.genre) && tk.contains("SUPER LEAGUE") && !tk.contains("BASKET") && !tk.contains("GBL"))
+            x.genre = "Football";  // Sport24 sometimes tags a Super League simulcast as basketball
+        if (x.genre.isEmpty()) x.genre = other;
+        return x.genre.isEmpty() ? null : x;  // football, basketball, motor sport and martial arts only
     }
 
     static String clean(String s) {

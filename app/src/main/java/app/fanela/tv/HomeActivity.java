@@ -38,6 +38,11 @@ import java.util.concurrent.Executors;
  *
  * Back (BackKey, the same on Android 8-14): closes the match screen, then lets the layout go back (Matchday's moved
  * list returns to row 1), else the app closes.
+ *
+ * Followed sports (F1, UFC; F1-UFC-ARCHITECTURE §7): the model gains one SportData per sport, read from the event
+ * store with its clock rules (SportEngine.events); OK on a sport's hero, tile, row or card opens the event screen
+ * (EventScreen, in the match screen's place: prepared on the detail thread, updated in place, kept across the app being
+ * ended in the background). A home-screen tile's "f1|..." / "ufc|..." key opens it too (openPending).
  */
 public class HomeActivity extends Activity implements HomeLayout.Host {
     private static final long LIVE_EVERY = 30000L, IDLE_EVERY = 5 * 60000L, BUSY_RETRY = 3000L;
@@ -59,6 +64,12 @@ public class HomeActivity extends Activity implements HomeLayout.Host {
     /** The match screen's match and club, to prepare it again when the data changes (null while it is closed). */
     private Match detailMatch;
     private Teams.Club detailClub;
+    /** The event screen's event and the session it opened on (null while it is closed). */
+    private SportEvent detailEvent;
+    private String detailSession;
+    /** QAS-5: the event screen's focused row and right-panel page as the system kept them, for its first push. */
+    private String restoreEventFocus;
+    private int restoreEventPage;
     private volatile long lastTick;     // net thread (onResume resets it): when the live scores were last polled
     private volatile boolean lastLive;  // what that poll found
     /** The current content has been drawn once: the network may start (afterFirstDraw). */
@@ -104,7 +115,7 @@ public class HomeActivity extends Activity implements HomeLayout.Host {
                     live = lastLive;
                     busy = Engine.busy();  // a refresh started elsewhere (Settings, the job): ask again in a moment
                     if (!busy) Engine.refresh(app, false);  // cheap when nothing is due: clubs have their own tiers
-                    change = Engine.nextChange(Store.load(app), System.currentTimeMillis());  // a game without a live feed
+                    change = Engine.nextChangeAll(app, System.currentTimeMillis());  // a game (or a session) without a live feed
                 } catch (Throwable ignored) {
                 } finally {
                     refreshing = false;
@@ -147,8 +158,10 @@ public class HomeActivity extends Activity implements HomeLayout.Host {
         pendingMatch = b != null ? b.getString("match") : getIntent().getStringExtra("match");
         restoreKey = b != null ? b.getString("focus") : null;
         restoreSelected = b != null ? b.getString("selected") : null;
+        restoreEventFocus = b != null ? b.getString("eventFocus") : null;
+        restoreEventPage = b != null ? b.getInt("eventPage", 0) : 0;
         build(true);
-        if (!Teams.chosen(this) && Teams.followed(this).isEmpty() && Scenario.active(this) == null) {
+        if (!Teams.chosen(this) && Sports.nothingFollowed(this) && Scenario.active(this) == null) {
             startActivity(new Intent(this, SettingsActivity.class).putExtra("setup", true));
         }
     }
@@ -160,9 +173,13 @@ public class HomeActivity extends Activity implements HomeLayout.Host {
      */
     @Override protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
-        out.putString("match", overlay != null && detailMatch != null ? detailMatch.key : pendingMatch);
+        out.putString("match", overlay != null && detailMatch != null ? detailMatch.key
+            : overlay != null && detailEvent != null ? eventKey() : pendingMatch);
         out.putString("focus", layout == null ? null : overlay != null ? panelReturn : layout.focusKey());
         out.putString("selected", layout == null ? null : layout.selected());
+        // the event screen: the opened session is in "match"; the focused row and the panel's page apart (QAS-5)
+        out.putString("eventFocus", overlay != null && detailEvent != null ? EventScreen.focused(overlay) : null);
+        out.putInt("eventPage", overlay != null && detailEvent != null ? EventScreen.page(overlay) : 0);
     }
 
     @Override protected void onNewIntent(Intent i) {
@@ -235,6 +252,7 @@ public class HomeActivity extends Activity implements HomeLayout.Host {
 
     /** Back: the match screen closes, else the layout goes back (Matchday's moved list), else the app closes. */
     private boolean onBack() {
+        if (overlay != null && EventScreen.back(overlay)) return true;  // a fighter being chosen: only the choice goes
         if (overlay != null) { closeDetail(); return true; }
         return layout != null && layout.back();
     }
@@ -305,6 +323,13 @@ public class HomeActivity extends Activity implements HomeLayout.Host {
                 h.teams.put(id, k.teams(basket));
                 h.clubs.add(d);
             }
+            for (String sp : sc != null ? sc.sports : Sports.followed(this)) {  // each followed sport as loading
+                SportModel.SportData d = new SportModel.SportData();
+                d.sport = sp;
+                d.label = SportText.sportName(sp);
+                d.kind = HomeModel.Kind.LOADING;
+                h.sports.add(d);
+            }
             h.status = HomeModel.Status.UPDATING;
             h.statusText = AppText.t("updating");
             l.first(this, h);
@@ -341,6 +366,7 @@ public class HomeActivity extends Activity implements HomeLayout.Host {
         overlay = null;  // the match screen went with the old content
         detailMatch = null;
         detailClub = null;
+        detailEvent = null;
         shown = null;
         builtLang = I18n.lang();
         builtTheme = Ui.key();
@@ -369,7 +395,7 @@ public class HomeActivity extends Activity implements HomeLayout.Host {
             try {
                 startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://play.google.com/store/apps/details?id=" + pkg)));
             } catch (Exception ignored) {
-                android.widget.Toast.makeText(this, I18n.f("app_missing", Cards.appName(pkg)), android.widget.Toast.LENGTH_LONG).show();
+                android.widget.Toast.makeText(this, I18n.f("app_missing", SportWhere.appName(pkg)), android.widget.Toast.LENGTH_LONG).show();
             }
         }
     }
@@ -405,7 +431,7 @@ public class HomeActivity extends Activity implements HomeLayout.Host {
                 shown = m;
                 l.bind(m);
                 if (first && restoreKey != null && overlay == null && root.findFocus() != null) { l.focus(restoreKey); restoreKey = null; }
-                if (overlay != null) refreshMatch(m);
+                if (overlay != null) { refreshMatch(m); refreshEvent(m); }
                 openPending();
             }});
         } catch (Throwable t) {  // out of memory, say: the screen keeps what it shows until the next load
@@ -452,8 +478,23 @@ public class HomeActivity extends Activity implements HomeLayout.Host {
             stale |= d.stale;
             h.clubs.add(d);
         }
-        long last = sc != null ? sc.savedAt : Store.lastUpdateAll(app);
-        boolean offline = sc != null ? "offline".equals(sc.mode) : HomeModel.offline(tried, h.empty(), last, stale, Engine.failedAt(app), now);
+        // the followed sports, after the clubs
+        List<SportEvent> events = sc != null ? sc.events : SportEngine.events(app, now);
+        SportPrefs prefs = sc != null && sc.prefs != null ? sc.prefs : Sports.prefs(app);
+        boolean hidden = SportText.hidden(app);
+        android.content.SharedPreferences eng = app.getSharedPreferences(Sports.ENGINE, Context.MODE_PRIVATE);
+        for (String sp : sc != null ? sc.sports : Sports.followed(app)) {
+            SportModel.SportData d = SportModel.of(events, sp, prefs, now, hidden, focusName(app, sp, prefs));
+            d.stale = sc == null && SportEngine.stale(app, sp);
+            boolean ever = sc != null || eng.getLong("ok_" + sp, 0) > 0 || !d.events.isEmpty();
+            if (!ever && d.hero == null) d.kind = waiting ? HomeModel.Kind.LOADING : HomeModel.Kind.NONE;
+            loading |= d.kind == HomeModel.Kind.LOADING;
+            stale |= d.stale;
+            h.sports.add(d);
+        }
+        long last = sc != null ? sc.savedAt : Math.max(Store.lastUpdateAll(app), SportEngine.lastOk(app));
+        long failed = sc != null ? 0 : Math.max(Engine.failedAt(app), SportEngine.failedAt(app));
+        boolean offline = sc != null ? "offline".equals(sc.mode) : HomeModel.offline(tried, h.empty(), last, stale, failed, now);
         if (loading) { h.status = HomeModel.Status.UPDATING; h.statusText = AppText.t("updating"); }
         else if (offline) {
             h.status = HomeModel.Status.OFFLINE;
@@ -466,9 +507,31 @@ public class HomeActivity extends Activity implements HomeLayout.Host {
         return h;
     }
 
+    /** The F1 row's focus name for its label ("Formula 1 · Norris"): the first focus's surname; "" for none. */
+    static String focusName(Context c, String sport, SportPrefs p) {
+        if (!SportEvent.F1.equals(sport) || p == null || p.focus.isEmpty()) return "";
+        String n = Sports.name(c, p.focus.get(0)).trim();
+        if (p.focus.get(0).startsWith("d:") && n.indexOf(' ') > 0) n = n.substring(n.lastIndexOf(' ') + 1);
+        return n;
+    }
+
     /** Opens the match a home-screen tile asked for, once it is on screen (its club is selected first). */
     private boolean openPending() {
         if (pendingMatch == null || shown == null) return false;
+        if (SportEvent.isEventKey(pendingMatch)) {  // an F1 session or a UFC card: the event screen, its sport selected
+            String ek = SportEvent.eventKey(pendingMatch), sid = SportEvent.sessionId(pendingMatch);
+            for (SportModel.SportData d : shown.sports) {
+                SportEvent e = d.event(ek);
+                if (e == null) continue;
+                pendingMatch = null;
+                if (!d.id().equals(layout.selected()) && Appearance.CLUB.equals(builtLayout)) { layout.select(d.id()); layout.bind(shown); }
+                openEvent(e, sid);
+                return true;
+            }
+            for (SportModel.SportData d : shown.sports) if (d.kind == HomeModel.Kind.LOADING) return false;  // not read yet
+            pendingMatch = null;
+            return false;
+        }
         for (HomeModel.ClubData d : shown.clubs) {
             List<Match> ms = new ArrayList<>(d.latest);
             ms.addAll(d.fixtures);
@@ -482,6 +545,115 @@ public class HomeActivity extends Activity implements HomeLayout.Host {
         }
         pendingMatch = null;  // the match is no longer listed
         return false;
+    }
+
+    // ---------- the event screen ----------
+    @Override public void openEvent(SportEvent e, String sessionId) {
+        if (e == null) return;
+        showEvent(e, sessionId);
+    }
+
+    /**
+     * The event screen's key for the state the system keeps: the event and the session it was opened on (the hero's),
+     * never the focused row, which is kept apart with the panel's page (QAS-5).
+     */
+    private String eventKey() {
+        return detailEvent.key() + (detailSession == null ? "" : "#" + detailSession);
+    }
+
+    /** The sport's choices and the in-app hide-scores switch, as the model was built with them. */
+    private SportPrefs prefsFor(HomeModel h, String sport) {
+        if (h != null) for (SportModel.SportData d : h.sports) if (d.sport.equals(sport)) return d.prefs;
+        Scenario.Snapshot sc = Scenario.active(this);
+        return sc != null && sc.prefs != null ? sc.prefs : Sports.prefs(this);
+    }
+
+    /** Opens the event screen: prepared on the detail thread, then pushed in as the match screen is. */
+    private void showEvent(final SportEvent e, final String sessionId) {
+        final HomeModel h = shown;
+        final Context app = this;
+        final int gen = ++matchRequest;
+        final boolean hidden = SportText.hidden(this);
+        final SportPrefs prefs = prefsFor(h, e.sport);
+        detail.execute(new Runnable() { public void run() {
+            final EventScreen.Data d;
+            try { d = EventScreen.prepare(app, e, sessionId, h, hidden, prefs); }
+            catch (Throwable t) { android.util.Log.w("Fanela", "event screen", t); return; }
+            ui.post(new Runnable() { public void run() {
+                if (gone() || gen != matchRequest || !resumed && !hasWindowFocus()) return;
+                pushEvent(d);
+                detailEvent = e;
+                detailSession = sessionId;
+            }});
+        }});
+    }
+
+    /**
+     * A fighter followed or unfollowed from his bout row (long-press OK): saved as Settings saves it (his name with
+     * him), then a refresh redraws the cards and the home screen in the background (a scenario is left alone).
+     */
+    private void followFighter(SportEvent.Fighter f, boolean on) {
+        if (f == null || f.id == null || f.id.isEmpty()) return;
+        if (Scenario.active(this) != null) return;
+        Sports.setUfcFighter(this, f.id, SportText.name(f), on);
+        final Context app = getApplicationContext();
+        try {
+            net.execute(new Runnable() { public void run() {
+                Engine.background();
+                try { Engine.refresh(app, false); } catch (Throwable ignored) { }
+                loadLater();
+            }});
+        } catch (Exception ignored) { }  // shutting down
+    }
+
+    private void pushEvent(EventScreen.Data d) {
+        closeDetail();
+        panelReturn = layout.focusKey();
+        overlay = EventScreen.build(this, d, new EventScreen.Actions() {
+            public void open(String pkg) { OpenActivity.launch(HomeActivity.this, pkg); }
+            public void get(String pkg) { openStore(pkg); }
+            public void follow(SportEvent.Fighter f, boolean on) { followFighter(f, on); }
+        });
+        root.addView(overlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        overlay.setAlpha(0f);
+        overlay.setTranslationY(Ui.px(this, Ui.PUSH_RISE));
+        overlay.animate().alpha(1f).translationY(0).setDuration(Ui.PUSH_MS).setInterpolator(Ui.FAST_OUT_SLOW_IN).start();
+        layout.block(true);
+        View f = EventScreen.launchFocus(overlay);
+        if (f != null) f.requestFocus();
+        if (restoreEventFocus != null || restoreEventPage != 0) {  // back after the system ended the app: as it was left
+            EventScreen.restore(overlay, restoreEventFocus, restoreEventPage);
+            restoreEventFocus = null;
+            restoreEventPage = 0;
+        }
+        overlay.announceForAccessibility(overlay.getContentDescription());
+    }
+
+    /** New data while the event screen is open: the same event from it, prepared again and swapped in place. */
+    private void refreshEvent(final HomeModel h) {
+        final SportEvent was = detailEvent;
+        final FrameLayout o = overlay;
+        if (was == null || o == null) return;
+        SportEvent found = was;
+        for (SportModel.SportData d : h.sports) { SportEvent x = d.event(was.key()); if (x != null) { found = x; break; } }
+        final SportEvent e = found;
+        final String sid = detailSession;
+        final Context app = this;
+        final int gen = matchRequest;
+        final boolean hidden = SportText.hidden(this);
+        final SportPrefs prefs = prefsFor(h, e.sport);
+        try {
+            detail.execute(new Runnable() { public void run() {
+                final EventScreen.Data d;
+                try { d = EventScreen.prepare(app, e, sid, h, hidden, prefs); }
+                catch (Throwable t) { android.util.Log.w("Fanela", "event screen update", t); return; }
+                ui.post(new Runnable() { public void run() {
+                    if (gone() || o != overlay || gen != matchRequest) return;
+                    detailEvent = e;
+                    EventScreen.update(o, d);
+                }});
+            }});
+        } catch (Exception ignored) { }  // shutting down
     }
 
     // ---------- the match screen ----------
@@ -566,6 +738,8 @@ public class HomeActivity extends Activity implements HomeLayout.Host {
         overlay = null;
         detailMatch = null;
         detailClub = null;
+        detailEvent = null;
+        detailSession = null;
         o.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         layout.block(false);
         layout.focus(panelReturn);

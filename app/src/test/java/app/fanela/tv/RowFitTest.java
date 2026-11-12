@@ -95,6 +95,18 @@ public class RowFitTest {
         assertEquals(336, ClubViews.FixtureRow.glyphLeft(true) + 14, 0);
     }
 
+    @Test public void theF1SessionRowGivesATwelveHourTimeItsRoom() {
+        // "10:30" in RC Bold 36 is about 82 px (77 at 34), "am" at 24 about 30: about 115 with the 3 px gap
+        float hour = 77f * 36 / 34;
+        assertFalse("the old 110 px column ran it into the session", ClubViews.FixtureRow.keepSuffix(hour, 30, 110));
+        assertTrue(ClubViews.FixtureRow.keepSuffix(hour, 31, EventScreen.SessionRow.timeRoom(true)));
+        assertEquals(EventScreen.SessionRow.nameX(true) - 8, EventScreen.SessionRow.TIME_X + EventScreen.SessionRow.timeRoom(true), 0);
+        assertEquals("24-hour (Greek): the session where it always was", 336, EventScreen.SessionRow.nameX(false), 0);
+        assertTrue("21:00 fits as before", EventScreen.SessionRow.timeRoom(false) >= 110);
+        assertEquals("the name's right edge is fixed", EventScreen.SessionRow.nameX(false) + EventScreen.SessionRow.nameRoom(false),
+            EventScreen.SessionRow.nameX(true) + EventScreen.SessionRow.nameRoom(true), 0);
+    }
+
     @Test public void theSuffixStaysWholeOrGoesNeverShrunk() {
         // "10:00" RC Bold 34 is 77 px, "pm" at 24 is 30, "PM" 31
         assertTrue(ClubViews.FixtureRow.keepSuffix(77, 30, ClubViews.FixtureRow.timeRoom(true, true)));

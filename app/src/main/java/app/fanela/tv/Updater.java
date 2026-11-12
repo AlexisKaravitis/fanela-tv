@@ -19,7 +19,7 @@ final class Updater {
         JobScheduler js = (JobScheduler) c.getSystemService(Context.JOB_SCHEDULER_SERVICE);
         if (js == null) return;
         SharedPreferences sp = c.getSharedPreferences("engine", Context.MODE_PRIVATE);
-        if (!HomeRows.enabled(c) || Teams.followed(c).isEmpty()) {
+        if (!HomeRows.enabled(c) || Sports.nothingFollowed(c)) {
             js.cancel(JOB_PERIODIC);
             sp.edit().remove("jobVersion").apply();
             return;
@@ -36,7 +36,7 @@ final class Updater {
     /** One refresh soon, in the system's job queue (after install, boot, or a settings change outside the app). */
     static void soon(Context c) {
         JobScheduler js = (JobScheduler) c.getSystemService(Context.JOB_SCHEDULER_SERVICE);
-        if (js == null || Teams.followed(c).isEmpty()) return;
+        if (js == null || Sports.nothingFollowed(c)) return;
         js.schedule(new JobInfo.Builder(JOB_NOW, new ComponentName(c, UpdateJob.class)).setOverrideDeadline(3000).build());
     }
 }

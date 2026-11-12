@@ -11,8 +11,9 @@ public class UpdateJob extends JobService {
     private final Map<Integer, Engine.Stop> running = new ConcurrentHashMap<>();
 
     @Override public boolean onStartJob(final JobParameters p) {
-        if (!HomeRows.enabled(this) || Teams.followed(this).isEmpty()) {  // rows off or not supported any more: stop for good
+        if (!HomeRows.enabled(this) || Sports.nothingFollowed(this)) {  // rows off or not supported any more: stop for good
             Updater.schedule(this);
+            try { HomeRows.purgeRetired(this); } catch (Throwable ignored) { }  // rows retired meanwhile (QAS-4)
             return false;
         }
         final Engine.Stop stop = new Engine.Stop();

@@ -69,7 +69,11 @@ final class Engine {
                 again.set(false);
                 I18n.load(c);
                 Where.load(c);
-                boolean due = pass(c, force && first, stop);
+                boolean f = force && first;
+                boolean due = pass(c, f, stop);
+                if (BuildConfig.SPORTS) {  // F1 / UFC: nothing to do (and false) when no sport is followed
+                    try { due |= SportEngine.pass(c, f, stop); } catch (Throwable ignored) { }
+                }
                 first = false;
                 // nothing to draw for: the job was stopped, or nothing was due while nobody is watching
                 all = stop.set || (!due && !screenOn(c)) ? stored(c) : draw(c);
@@ -237,6 +241,9 @@ final class Engine {
     static boolean live(Context c) {
         long now = System.currentTimeMillis();
         for (Match m : Store.load(c)) if (liveSource(m) && inWindow(m, now)) return true;
+        if (BuildConfig.SPORTS) {  // a followed F1 session or UFC card in its live window
+            try { return SportEngine.live(c, now); } catch (Throwable ignored) { }
+        }
         return false;
     }
 
@@ -256,12 +263,31 @@ final class Engine {
         return next;
     }
 
+    /**
+     * nextChange over the clubs' matches and, when sports are on, the followed sports' events: the home screen's idle
+     * wake-up. MAX_VALUE: none.
+     */
+    static long nextChangeAll(Context c, long now) {
+        long next = nextChange(Store.load(c), now);  // as HomeActivity asks today
+        if (BuildConfig.SPORTS) next = Math.min(next, SportEngine.nextChange(SportEngine.events(c, now), now));
+        return next;
+    }
+
     /** A live update worth saving: the card changes, or the time it was last seen live moved on by 5 minutes. */
     static boolean worthSaving(Match cur, Match next) {
         return !next.signature().equals(cur.signature()) || next.seenLiveAt - cur.seenLiveAt >= 5 * 60000L;
     }
 
+    /** Live scores for the clubs, then live fields for the followed sports; true while either is in its window. */
     static boolean tick(Context c) {
+        boolean clubs = tickClubs(c), sports = false;
+        if (BuildConfig.SPORTS) {
+            try { sports = SportEngine.tick(c, new HashMap<String, String>(), System.currentTimeMillis()); } catch (Throwable ignored) { }
+        }
+        return clubs || sports;
+    }
+
+    private static boolean tickClubs(Context c) {
         background();
         I18n.load(c);
         Where.load(c);
@@ -347,11 +373,19 @@ final class Engine {
             I18n.load(c);
             Where.load(c);
             List<Match> all = Store.load(c);
-            timeStates(all, System.currentTimeMillis());
+            long now = System.currentTimeMillis();
+            timeStates(all, now);
+            boolean rows = HomeRows.enabled(c);
             try {
-                if (HomeRows.enabled(c)) Cards.publishAll(c, all);
+                if (rows) Cards.publishAll(c, all);
                 else HomeRows.removeUnfollowed(c);  // rows switched off: every club row is hidden, then deleted
             } catch (Throwable ignored) { }
+            if (BuildConfig.SPORTS) {  // the sports' rows, apart: a failure there never touches the club rows
+                try {
+                    if (rows) EventCards.publishAll(c, SportEngine.events(c, now));
+                    else HomeRows.removeUnfollowedSports(c);
+                } catch (Throwable ignored) { }
+            }
             return all;
         }
     }

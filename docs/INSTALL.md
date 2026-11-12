@@ -13,7 +13,7 @@ you see "Android TV OS", you're fine.
 ## Step 1: get the APK
 
 Open the [Releases page](https://github.com/AlexisKaravitis/fanela-tv/releases/latest) and download
-`fanela-1.2.1.apk` (about 1.2 MB) to your phone or computer.
+`fanela-1.3.0.apk` (about 1.3 MB) to your phone or computer.
 
 ## Step 2: allow installs from unknown sources
 
@@ -33,12 +33,12 @@ Pick whichever is easiest for you.
 
 1. Install **Send Files to TV** on your phone and on the TV (both from Google Play).
 2. Allow it to install apps on the TV, as in step 2.
-3. Open it on both devices, choose **Send** on the phone and pick `fanela-1.2.1.apk`.
+3. Open it on both devices, choose **Send** on the phone and pick `fanela-1.3.0.apk`.
 4. On the TV, open the file and choose **Install**, then **Open**.
 
 ### From a USB stick
 
-1. Copy `fanela-1.2.1.apk` to a USB stick and plug it into the TV.
+1. Copy `fanela-1.3.0.apk` to a USB stick and plug it into the TV.
 2. Open it with a file manager on the TV (for example **File Commander** or **X-plore** from Google Play) and choose
    **Install**.
 
@@ -48,7 +48,7 @@ No phone or computer needed. Install **Downloader** by AFTVnews from Google Play
 this link and press **Go**:
 
 ```
-github.com/AlexisKaravitis/fanela-tv/releases/latest/download/fanela-1.2.1.apk
+github.com/AlexisKaravitis/fanela-tv/releases/latest/download/fanela-1.3.0.apk
 ```
 
 When the download finishes, choose **Install**, then **Open**.
@@ -59,7 +59,7 @@ Turn on Developer options > USB debugging (or Network debugging) on the TV, then
 
 ```bash
 adb connect <TV IP address>:5555
-adb install fanela-1.2.1.apk
+adb install fanela-1.3.0.apk
 ```
 
 The TV shows a prompt the first time a computer connects. Choose **Allow**.

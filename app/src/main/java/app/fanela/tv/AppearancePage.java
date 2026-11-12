@@ -249,15 +249,17 @@ final class AppearancePage {
             Pick pick;
             try { pick = pick(app); } catch (Throwable t) { pick = null; }
             if (pick == null) return;
-            previewHasScore = showsScore(pick.match);
-            final boolean sample = pick.sample;
+            long now = System.currentTimeMillis();
+            final EventCardModel model = pick.event == null ? null : eventModel(app, pick.event, show, now);
+            previewHasScore = model != null ? eventShowsScore(model) : showsScore(pick.match);
+            final boolean sample = pick.sample, event = model != null;
             ui.post(new Runnable() { public void run() {
                 if (host.gone() || gen != generation) return;
-                styleHint.set(AppText.t(sample ? "card_style_hint_sample" : "card_style_hint"));
+                styleHint.set(event ? I18n.t("card_style_hint_event") : AppText.t(sample ? "card_style_hint_sample" : "card_style_hint"));
                 if (hintBlock.h != styleHint.height()) { hintBlock.h = styleHint.height(); page.relayout(); }
             }});
             final int[] order = order(looked);
-            long now = System.currentTimeMillis();
+            if (model != null) { drawEvents(gen, app, s, show, had, t0, model, order); return; }
             boolean stale = !pick.sample && Store.stale(app, pick.club.id, pick.match.team);
             // drawn at the focused size (x 1.04), so the scaled preview stays sharp
             int tw = Math.round(PW * Ui.SCALE_TILE * s);
@@ -283,12 +285,81 @@ final class AppearancePage {
 
     /** A preview at its slot's width: the full card in a style, made smaller in halves (sharp, no shimmer). */
     static Bitmap draw(Context app, Teams.Club club, Match m, boolean stale, String style, boolean show, long now, int tw) {
-        Bitmap big = CardStyles.draw(app, club, m, stale, style, show, now);
+        return smaller(CardStyles.draw(app, club, m, stale, style, show, now), tw);
+    }
+
+    private static Bitmap smaller(Bitmap big, int tw) {
         Bitmap half = Cards.smooth(big, tw);
         Bitmap small = Bitmap.createScaledBitmap(half, tw, Math.round(tw * 540f / 960f), true);
         if (half != big && half != small) half.recycle();
         if (big != small) big.recycle();
         return small;
+    }
+
+    // ---------- the previews of an event (no club match: the next Formula 1 or UFC event) ----------
+    /** The event's card as the home-screen row draws it (EventCardModel), the scores as the switch says. */
+    static EventCardModel eventModel(Context app, EventCards.Pick p, boolean show, long now) {
+        List<SportEvent> one = new java.util.ArrayList<>();
+        one.add(p.e);
+        return EventCardModel.of(p.e, p.sessionId, p.last, Sports.prefs(app), show, SportEngine.stale(app, p.e.sport), now,
+            EventCards.rosterFrom(app, one));
+    }
+
+    /** The scores switch changes this event's card: live or finished (a podium, a method). */
+    static boolean eventShowsScore(EventCardModel m) {
+        return m.state == CardModel.State.LIVE || m.state == CardModel.State.RESULT;
+    }
+
+    /** What an event preview shows, as previewKey's card part: style, language, the event and the card's words. */
+    static String eventKey(String style, EventCardModel m) {
+        return "event|" + style + "|" + I18n.lang() + "|" + m.event.key() + "|" + (m.session == null ? "" : m.session.id) + "|"
+            + m.event.signature() + "|" + m.state + "|" + m.stateLine + "|" + m.dateLine + "|" + m.time + "|" + m.clock + "|" + m.stale;
+    }
+
+    /** As drawing(), for an event: each style whose card changed, the looked-at one first. */
+    private void drawEvents(int gen, Context app, float s, boolean show, String[] had, long t0, EventCardModel model, int[] order) {
+        int tw = Math.round(PW * Ui.SCALE_TILE * s);
+        for (final int k : order) {
+            if (gen != generation) return;
+            String style = Appearance.STYLES[k];
+            final String key = previewKey(eventKey(style, model), show, tw);
+            if (key.equals(had[k])) continue;
+            final Bitmap small;
+            try { small = smaller(EventStyles.draw(app, model, style), tw); } catch (Throwable t) { continue; }
+            if (BuildConfig.DEBUG) android.util.Log.i("Fanela", "appearance preview " + style + " (event) drawn " + (System.nanoTime() - t0) / 1000000 + " ms after opening");
+            final int g = gen;
+            ui.post(new Runnable() { public void run() {
+                if (g != generation && !released) return;
+                shownKeys[k] = key;
+                shownBitmaps[k] = small;
+                if (released || host.gone()) return;
+                previews[k].set(small, true);
+                pulse();
+            }});
+        }
+    }
+
+    /**
+     * The followed sports' next card when no club has a match to show: a live one first, else the soonest
+     * (EventCards.pickNow, the home-screen row's own pick); null when no sport is followed or none has an event.
+     */
+    static EventCards.Pick nextEvent(Context c, long now) {
+        if (!BuildConfig.SPORTS) return null;
+        List<SportEvent> all = SportEngine.events(c, now);
+        if (all.isEmpty()) return null;
+        SportPrefs prefs = Sports.prefs(c);
+        EventCards.Pick best = null;
+        long bestAt = Long.MAX_VALUE;
+        boolean bestLive = false;
+        for (String sport : Sports.followed(c)) {
+            EventCards.Pick p = EventCards.pickNow(all, sport, prefs, now);
+            if (p == null || p.e == null) continue;
+            SportEvent.Session ses = p.e.session(p.sessionId);
+            boolean live = "in".equals(p.e.state) || ses != null && "in".equals(ses.state);
+            long at = ses != null ? ses.start : p.e.start;
+            if (best == null || live && !bestLive || live == bestLive && at < bestAt) { best = p; bestAt = at; bestLive = live; }
+        }
+        return best;
     }
 
     /** Empty slots pulse (.55 -> 1 -> .55, 1.2 s, as the home screen's skeletons) until every preview is drawn. */
@@ -317,11 +388,14 @@ final class AppearancePage {
         Teams.Club club;
         Match match;
         boolean sample;
+        /** No club match, a sport followed: its next event (club and match null). */
+        EventCards.Pick event;
     }
 
     /**
      * The match the previews show: the favourite's live or next match (either sport, the sooner), else another
-     * followed club's, else a sample: the favourite (or Olympiacos) at home tomorrow at 21:15 against a rival.
+     * followed club's, else the next Formula 1 or UFC event when one is followed, else a sample: the favourite (or
+     * Olympiacos) at home tomorrow at 21:15 against a rival.
      */
     static Pick pick(Context c) {
         I18n.load(c);
@@ -349,6 +423,12 @@ final class AppearancePage {
                 p.match = best;
                 return p;
             }
+        }
+        EventCards.Pick ev = nextEvent(c, now);
+        if (ev != null) {
+            Pick p = new Pick();
+            p.event = ev;
+            return p;
         }
         return sample(c, fav);
     }

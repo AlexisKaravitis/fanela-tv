@@ -35,15 +35,24 @@ final class MatchdayCards {
     /** About 30 cards (0.4 MB each at 1080p): the rows in view and their neighbours, both ways (the window is ~25). */
     private static final long BUDGET = 12L << 20;
 
-    /** What to draw for a key: the club, its match, whether its data is old. */
+    /** What to draw for a key: the club, its match, whether its data is old; or a sport's card (ev, club and m null). */
     static final class Job {
         final String key;
         final Teams.Club club;
         final Match m;
+        final MatchdayModel.EventRef ev;
         final boolean stale;
         /** The clock the card's words are written for ("TOMORROW"): the screen's. */
         final long now;
-        Job(String key, Teams.Club club, Match m, boolean stale, long now) { this.key = key; this.club = club; this.m = m; this.stale = stale; this.now = now; }
+        Job(String key, Teams.Club club, Match m, boolean stale, long now) { this.key = key; this.club = club; this.m = m; this.ev = null; this.stale = stale; this.now = now; }
+        /** An F1 session's or a UFC event's card (EventStyles.draw, scores shown as on the club rows). */
+        Job(String key, MatchdayModel.EventRef ev, boolean stale, long now) { this.key = key; this.club = null; this.m = null; this.ev = ev; this.stale = stale; this.now = now; }
+    }
+
+    /** A Matchday row's item as a job. */
+    static Job job(String key, MatchdayModel.Item it, long now) {
+        if (it.ev != null) return new Job(key, it.ev, it.ev.sport.stale, now);
+        return new Job(key, it.club.club, it.m, it.club.stale, now);
     }
 
     interface Listener { void ready(String key); }
@@ -81,6 +90,25 @@ final class MatchdayCards {
         String crest = club == null || club.crest == null ? "" : club.crest + Cards.have(c, club.crest);
         return style + "|" + I18n.lang() + "|" + Cards.CARD_VERSION + "|" + stale + "|" + m.signature() + "|" + cm.stateLine + "|" + cm.dateLine + "|" + cm.clock
             + "|" + Cards.images(c, m) + "|" + crest;
+    }
+
+    /** An event card's identity: as a match card's, from the event's signature and the card model's state words. */
+    static String key(String style, MatchdayModel.EventRef ev, long now) {
+        EventCardModel cm = model(ev, now);
+        return style + "|" + I18n.lang() + "|ev" + EventCards.CARD_VERSION + "|" + ev.sport.stale + "|" + ev.sport.hidden + "|" + ev.e.signature() + "|" + ev.sessionId
+            + "|" + ev.last + "|" + (cm == null ? "" : cm.stateLine + "|" + cm.dateLine + "|" + cm.clock + "|" + cm.time);
+    }
+
+    /**
+     * The card model of a sport's card (stream D's EventCardModel): scores shown unless the app hides them for F1 / UFC
+     * (SportText.HIDE_IN_APP: the sport's data says hidden), then drawn as the home-screen card with scores off.
+     */
+    static EventCardModel model(MatchdayModel.EventRef ev, long now) { return model(null, ev, now); }
+
+    /** The same, its focus coloured by the roster on the TV as the home-screen rows colour it (c null: the events' own orders). */
+    static EventCardModel model(Context c, MatchdayModel.EventRef ev, long now) {
+        try { return EventCardModel.of(ev.e, ev.sessionId, ev.last, ev.sport.prefs, !ev.sport.hidden, ev.sport.stale, now, EventCards.rosterFrom(c, ev.sport.events)); }
+        catch (RuntimeException t) { return null; }
     }
 
     void style(String s) { style = s; }
@@ -171,7 +199,13 @@ final class MatchdayCards {
         String st = style;
         if (st == null) st = Appearance.cardStyle(app);
         long t0 = System.nanoTime();
-        Bitmap full = CardStyles.draw(app, j.club, j.m, j.stale, st, true, j.now);
+        Bitmap full;
+        if (j.ev != null) {
+            EventCardModel cm = model(app, j.ev, j.now);
+            if (cm == null) return null;
+            full = EventStyles.draw(app, cm, st);
+        } else full = CardStyles.draw(app, j.club, j.m, j.stale, st, true, j.now);
+        if (full == null) return null;
         float s = Ui.scale(app) * Ui.SCALE_CARD;
         int w = Math.round(W * s), h = Math.round(H * s);
         Bitmap half = Cards.smooth(full, w);

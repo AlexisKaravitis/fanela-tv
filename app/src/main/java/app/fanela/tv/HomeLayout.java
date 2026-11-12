@@ -23,6 +23,8 @@ interface HomeLayout {
         void openSettings();
         /** The empty state's "Choose clubs": Settings › Your clubs. */
         void chooseClubs();
+        /** The event screen for an F1 weekend or a UFC card (sessionId: the session to select; null for the event). */
+        default void openEvent(SportEvent e, String sessionId) { }  // HomeActivity opens EventScreen; tests and other hosts ignore it
     }
 
     /** Display thread: makes ready everything bind() will draw for this model (it may be slow; bind() must not be). */

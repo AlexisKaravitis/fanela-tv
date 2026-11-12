@@ -65,7 +65,10 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
     private String panelId;
 
     // ---------- the main page ----------
-    private String league;  // the league the grid shows
+    private String league;  // the league the grid shows, or a sport's chip ("sport:f1": SportsSettings)
+    private SportsSettings sportPanel;
+    private SettingsViews.Text clubsHint;
+    private SettingsViews.Block hintBlock;
     private SettingsViews.ChipBar chipBar;
     private final List<SettingsViews.Chip> chips = new ArrayList<>();
     private FrameLayout grid;
@@ -99,18 +102,27 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
         final Context app = getApplicationContext();
         republisher = new SettingsLogic.Coalescer(rows, new Runnable() { public void run() { republishNow(app); } });
         league = b != null && b.getString("league") != null ? b.getString("league") : getIntent().getStringExtra("league");
-        if (league == null || Leagues.get(league) == null) league = Leagues.first(Leagues.country(this));
+        if (league == null || Leagues.get(league) == null && !(BuildConfig.SPORTS && SportsSettings.isChip(league)))
+            league = Leagues.first(Leagues.country(this));
+        sportPanel = new SportsSettings(this, sportHost());
         root = new FrameLayout(this);
         root.setBackgroundColor(Ui.APP_BG);
         focusLayer = new AppViews.FocusLayer(this);
         root.addView(focusLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         buildMain();
         setContentView(root);
-        View first = setup ? langRow : tiles.isEmpty() ? selectedChip() : tiles.get(0);
+        View first = setup ? langRow : !tiles.isEmpty() ? tiles.get(0) : sportPanel.sport() != null ? main.findViewWithTag("sporttile:" + sportPanel.sport()) : selectedChip();
+        if (first == null) first = selectedChip();
         View was = b == null ? null : tagged(main, b.getString("focus"));  // re-created by the system: where the viewer was
         if (was != null) first = was;
+        // a sport's tiles arrive after the screen is built (the standings, the stored cards): the focus goes back then
+        else if (b != null && b.getString("focus") != null && sportPanel.sport() != null) sportPanel.pendingFocus = b.getString("focus");
         if (first != null) { first.requestFocus(); main.reveal(first, false); }
         if (b != null) reopen(b.getString("screen"), b.getString("screenFocus"));
+        // the shown chip in view even when the focus is elsewhere (a sport's chip sits at the far end of the row)
+        final SettingsViews.Chip shownChip = selectedChip();
+        if (shownChip != null && !shownChip.isFocused())
+            chipBar.post(new Runnable() { public void run() { if (!gone() && chipBar.getWidth() > 0) chipBar.reveal(shownChip, false); } });
         tickClocks();
         root.setAlpha(0);
         root.setTranslationY(Ui.PUSH_RISE * s);
@@ -185,6 +197,7 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
         ui.removeCallbacksAndMessages(null);
         if (appearance != null) appearance.release();
         if (main != null) main.release();
+        if (sportPanel != null) sportPanel.clear();
         if (work != null) work.shutdown();          // let queued saves / row changes finish
         skeletons(false);
         if (images != null) images.shutdownNow();   // images are not needed any more
@@ -364,11 +377,12 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
         }
 
         // ---------- clubs ----------
-        SettingsViews.Text clubs = heading(I18n.t("clubs"));
+        // with Formula 1 and UFC: "Your clubs and sports" (SPEC-F1-UFC 10), its hint line following the chip
+        SettingsViews.Text clubs = heading(I18n.t(BuildConfig.SPORTS ? "clubs_sports" : "clubs"));
         p.add(clubs, 96, W, clubs.height(), setup ? 40 : 44);
         clubsAnchor = setup ? clubs : null;  // Settings: the clubs are the page's top; first start: under their heading
-        SettingsViews.Text hint = new SettingsViews.Text(this, I18n.t("clubs_hint"), Ui.REGULAR, 28, Ui.alpha(Ui.TXT, 0.68f), W, 0, 2);
-        p.add(hint, 96, W, hint.height(), 8);
+        clubsHint = new SettingsViews.Text(this, chipHint(), Ui.REGULAR, 28, Ui.alpha(Ui.TXT, 0.68f), W, 0, 2);
+        hintBlock = p.add(clubsHint, 96, W, clubsHint.height(), 8);
         chipBar = new SettingsViews.ChipBar(this);
         p.add(chipBar, 96, W, 60, setup ? 22 : 28);
         buildChips();
@@ -398,12 +412,14 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
             }});
             addRow(p, basketRow, 14);
             if (HomeRows.supported(this)) {
-                rowsRow = row("rows", I18n.t("rows"), I18n.t("rows_hint"));
+                // QAS-12: a followed sport has its row too (nothing followed: the clubs' words, as before)
+                rowsRow = row("rows", I18n.t("rows"), I18n.t(Sports.followed(this).isEmpty() ? "rows_hint" : "rows_hint_sports"));
                 showSwitch(rowsRow, settings.getBoolean("rows", true));
                 rowsRow.setOnClickListener(new View.OnClickListener() { public void onClick(View v) {
                     boolean on = !settings.getBoolean("rows", true);
                     settings.edit().putBoolean("rows", on).commit();
                     if (on) for (String id : Teams.followed(SettingsActivity.this)) { Teams.Club k = Teams.get(SettingsActivity.this, id); if (k != null) addRow(k); }
+                    if (on) for (String sp : Sports.followed(SettingsActivity.this)) addSportRow(sp);
                     showSwitch(rowsRow, on);
                     changed();
                     checkHiddenRows();
@@ -521,6 +537,7 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
         l.add(cl);
         for (int r = 0; r * COLS < tiles.size(); r++)
             l.add(new SettingsViews.Line(clubsAnchor, tiles.subList(r * COLS, Math.min(tiles.size(), (r + 1) * COLS))));
+        for (List<View> items : sportPanel.lines()) l.add(new SettingsViews.Line(clubsAnchor, items));
         if (setup) { main.fitAnchors(); return; }
         for (SettingsViews.OptionRow o : options) {
             if (o.getVisibility() != View.VISIBLE) continue;
@@ -561,6 +578,28 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
             chips.add(chip);
             chipBar.add(chip);
         }
+        if (BuildConfig.SPORTS) {  // "More sports": Formula 1 and UFC, their panels in the grid (SportsSettings)
+            chipBar.add(new SettingsViews.GroupLabel(this, I18n.t("sports_group")));
+            for (String sp : Sports.ALL) {
+                final String id = SportsSettings.chipId(sp);
+                final SettingsViews.Chip chip = new SettingsViews.Chip(this, id, SportsSettings.sportName(sp));
+                chip.setTag("chip:" + id);
+                final Runnable pick = new Runnable() { public void run() {
+                    if (!chip.isFocused() || id.equals(league) || gone()) return;
+                    select(id);
+                }};
+                chip.setOnFocusChangeListener(new View.OnFocusChangeListener() { public void onFocusChange(View v, boolean has) {
+                    ui.removeCallbacks(pick);
+                    if (has) ui.postDelayed(pick, 300);
+                }});
+                chip.setOnClickListener(new View.OnClickListener() { public void onClick(View v) {
+                    ui.removeCallbacks(pick);
+                    if (!id.equals(league)) select(id);
+                }});
+                chips.add(chip);
+                chipBar.add(chip);
+            }
+        }
         recount();
     }
 
@@ -568,7 +607,8 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
     private void recount() {
         Set<String> follow = Teams.followed(this);
         for (SettingsViews.Chip c : chips) {
-            c.count = followedIn(c.id, follow);
+            String sp = SportsSettings.sportOfChip(c.id);  // a sport's chip counts 1 while it is followed
+            c.count = sp != null ? (Sports.follows(this, sp) ? 1 : 0) : followedIn(c.id, follow);
             c.selected = c.id.equals(league);
             c.setContentDescription(c.label + (c.count > 0 ? ", " + c.count + " " + I18n.t("following").toLowerCase(I18n.locale()) : ""));
         }
@@ -584,11 +624,29 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
     private void select(String id) {
         league = id;
         getIntent().putExtra("league", league);
+        setHint(null);
         showLeague(league);
+    }
+
+    /** The hint under "Your clubs and sports": the clubs' own, or the shown sport's. */
+    private String chipHint() {
+        String sp = SportsSettings.sportOfChip(league);
+        return sp != null ? SportsSettings.hint(sp) : I18n.t("clubs_hint");
+    }
+
+    /** Sets the hint line (null: the shown chip's); the page moves when it takes another line. */
+    private void setHint(String text) {
+        if (clubsHint == null) return;
+        clubsHint.set(text == null ? chipHint() : text);
+        if (hintBlock != null && hintBlock.h != clubsHint.height()) {
+            hintBlock.h = clubsHint.height();
+            main.relayout();
+        }
     }
 
     /** Followed clubs in a league: those picked from it, and those in its list (a EuroLeague club picked as football). */
     private int followedIn(String leagueId, Set<String> follow) {
+        if (Leagues.get(leagueId) == null) return 0;
         List<Teams.Club> list = "gre.1".equals(leagueId) ? Teams.greek(this) : Teams.league(this, leagueId);
         Set<String> in = new java.util.HashSet<>();
         if (list != null) for (Teams.Club k : list) in.add(k.id);
@@ -603,11 +661,19 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
     /** Fills the grid with a league's clubs (downloaded first if this TV has never listed them). */
     private void showLeague(final String lg) {
         View had = getCurrentFocus();
-        boolean focusInGrid = had != null && tiles.contains(had);
+        boolean focusInGrid = had != null && (tiles.contains(had) || sportPanel.contains(had));
         grid.removeAllViews();
         tiles.clear();
+        sportPanel.clear();
         recount();
         skeletons(false);
+        String sport = SportsSettings.sportOfChip(lg);
+        if (sport != null) {  // Formula 1 or UFC: the sport's panel in the grid
+            grid.setContentDescription(null);
+            sportPanel.show(sport);
+            if (focusInGrid) { View c = selectedChip(); if (c != null) { c.requestFocus(); main.reveal(c, true); } }
+            return;
+        }
         List<Teams.Club> clubs = Teams.sorted(this, lg);
         if (clubs == null) {
             // the list is on its way: two rows of skeleton tiles in the grid's slots, pulsing (never a bare line of text)
@@ -797,7 +863,7 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
      */
     private String fontLicences() {
         StringBuilder b = new StringBuilder("\n\n").append(AppText.t("font_licences"));
-        for (int id : new int[]{R.raw.ofl_google_sans, R.raw.apache_roboto}) {
+        for (int id : new int[]{R.raw.ofl_google_sans, R.raw.apache_roboto, R.raw.circuits_license}) {
             try (java.io.InputStream in = getResources().openRawResource(id)) {
                 java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
                 byte[] buf = new byte[8192];
@@ -863,6 +929,8 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
         String id = Teams.favourite(this);
         Teams.Club k = id == null ? null : Teams.get(this, id);
         favRow.value(k == null ? "–" : k.label(), false, false);
+        // clubs only, also with a sport followed: the favourite gives the app its colours and cycles through clubs
+        // (SPEC-F1-UFC 10), so a viewer who follows only Formula 1 or UFC has no row to cycle
         int vis = Teams.followed(this).isEmpty() ? View.GONE : View.VISIBLE;
         if (favRow.getVisibility() != vis) {
             favRow.setVisibility(vis);
@@ -906,11 +974,11 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
     private void refreshStatus() {
         if (statusRow == null) return;
         StringBuilder sb = new StringBuilder();
-        Set<String> follow = Teams.followed(this);
-        if (follow.isEmpty()) sb.append(I18n.t("no_clubs")).append('\n');
+        Set<String> follow = Teams.followed(this), sportsOn = Sports.followed(this);
+        if (follow.isEmpty() && sportsOn.isEmpty()) sb.append(I18n.t("no_clubs")).append('\n');
         boolean basket = Teams.basketball(this);
         // one line when all is well; a club is named only when its data is old (offline, or a source is down)
-        long latest = Store.lastUpdateAll(this);  // the same value as Home's "Updated …"
+        long latest = Math.max(Store.lastUpdateAll(this), SportEngine.lastOk(this));  // the same value as Home's "Updated …"
         StringBuilder old = new StringBuilder();
         for (String id : follow) {
             Teams.Club k = Teams.get(this, id);
@@ -922,7 +990,13 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
                         .append(": ").append(when(t)).append('\n');
             }
         }
-        if (!follow.isEmpty())
+        SharedPreferences eng = getSharedPreferences(Sports.ENGINE, MODE_PRIVATE);
+        for (String sp : sportsOn) {  // a sport: named when its feed has not answered yet or not for a while
+            long t = eng.getLong("ok_" + sp, 0);
+            if (t <= 0 || SportEngine.stale(this, sp))
+                old.append("⚠ ").append(SportsSettings.sportName(sp)).append(" · ESPN: ").append(when(t)).append('\n');
+        }
+        if (!follow.isEmpty() || !sportsOn.isEmpty())
             sb.append(latest <= 0 ? I18n.t("never_updated") : I18n.f("updated", I18n.day(latest).toLowerCase(I18n.locale()) + " " + I18n.time(latest))).append('\n');
         sb.append(old);
         String text = sb.toString().replaceAll("\n+$", "");
@@ -1033,7 +1107,8 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
         SeasonTableProvider.load(this);
         StringBuilder pages = new StringBuilder();
         for (String t : SeasonTableProvider.wikiTitles()) pages.append(pages.length() > 0 ? ", " : "").append('“').append(t).append('”');
-        openText("credits", I18n.t("credits"), I18n.f("credits_full", pages.length() > 0 ? pages.toString() : "-") + checkedList() + fontLicences());
+        String sportsCredit = BuildConfig.SPORTS ? "\n\n" + I18n.t("credits_sports") : "";  // ESPN's F1 and UFC data, the circuit outlines
+        openText("credits", I18n.t("credits"), I18n.f("credits_full", pages.length() > 0 ? pages.toString() : "-") + sportsCredit + checkedList() + fontLicences());
     }
 
     private void openPrivacy() { openText("privacy", I18n.t("privacy"), I18n.t("privacy_full")); }
@@ -1059,6 +1134,31 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
                 final long id = HomeRows.channel(app, k.rowKey(), label, Cards.channelLogoLazy(app, k));
                 if (!HomeRows.browsable(app, id)) ui.post(new Runnable() { public void run() { requestBrowsable(id, label); } });
             } catch (Throwable ignored) { }
+        }});
+    }
+
+    /** Creates (or restores) a sport's row now (EventCards.addRow) and asks Android to show it if it is hidden. */
+    private void addSportRow(final String sport) {
+        final Context app = getApplicationContext();
+        work.execute(new Runnable() { public void run() {
+            try {
+                final long id = EventCards.addRow(app, sport);
+                if (id == -1) return;
+                final String label = SportsSettings.rowLabel(app, sport);
+                if (!HomeRows.browsable(app, id)) ui.post(new Runnable() { public void run() { requestBrowsable(id, label); } });
+            } catch (Throwable ignored) { }
+        }});
+    }
+
+    /**
+     * A sport just followed: its own pass, then its row's cards, at once on the work thread (after its row is made),
+     * then after on the UI thread (the UFC panel's fighters). SportEngine.follow; the full refresh runs as before.
+     */
+    private void followSport(final String sport, final Runnable after) {
+        final Context app = getApplicationContext();
+        work.execute(new Runnable() { public void run() {
+            try { SportEngine.follow(app, sport); } catch (Throwable ignored) { }
+            if (after != null) ui.post(new Runnable() { public void run() { if (!gone()) after.run(); } });
         }});
     }
 
@@ -1145,6 +1245,10 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
                 long ch = row.getLong(k.rowKey(), -1);
                 if (ch != -1 && !pending.contains(ch + "\t") && !HomeRows.browsable(app, ch)) { ids.add(new long[]{ch}); names.add(k.heading()); }
             }
+            for (String sp : Sports.followed(app)) {  // the sports' rows ("sport_f1"), after the clubs'
+                long ch = row.getLong(Sports.rowKey(sp), -1);
+                if (ch != -1 && !pending.contains(ch + "\t") && !HomeRows.browsable(app, ch)) { ids.add(new long[]{ch}); names.add(SportsSettings.rowLabel(app, sp)); }
+            }
             ui.post(new Runnable() { public void run() { if (!gone()) showHidden(ids, names); } });
         }});
     }
@@ -1183,11 +1287,47 @@ public class SettingsActivity extends Activity implements AppearancePage.Host {
     }
 
     /** Settings changed: refresh now (a refresh already running does one more pass with the new settings). */
-    private void changed() {
+    private void changed() { changed(null); }
+
+    /** The same, then after on the UI thread (a sport followed: its panel lists what the refresh brought). */
+    private void changed(final Runnable after) {
         final Context app = getApplicationContext();
         refresher.execute(new Runnable() { public void run() {  // never blocks row creation or prompts
             Engine.background();
             try { Updater.schedule(app); Engine.refresh(app, false); } catch (Throwable ignored) { }
+            if (after != null) ui.post(new Runnable() { public void run() { if (!gone()) after.run(); } });
         }});
+    }
+
+    // ---------- Formula 1 and UFC (SportsSettings) ----------
+    /** The sport panel's side of the page: the grid, the threads, the hint line, the follow and its row. */
+    private SportsSettings.Host sportHost() {
+        return new SportsSettings.Host() {
+            public FrameLayout grid() { return grid; }
+            public Handler ui() { return ui; }
+            public ExecutorService lists() { return lists; }
+            public ExecutorService images() { return images; }
+            public ExecutorService fetches() { return fetches; }
+            public boolean gone() { return SettingsActivity.this.gone(); }
+            public boolean shows(String sport) { return SportsSettings.chipId(sport).equals(league); }
+            public void laidOut(float gridH) {
+                if (gridH >= 0) gridBlock.h = gridH;
+                main.relayout();
+                relines();
+            }
+            public void hint(String text) { setHint(text); }
+            public void followed(String sport, boolean on, Runnable whenRefreshed) {
+                settings.edit().putBoolean("onboarded", true).apply();  // a sport followed in the first start ends it too
+                recount();
+                if (on && HomeRows.enabled(SettingsActivity.this)) addSportRow(sport);
+                if (on) followSport(sport, whenRefreshed);  // its row and cards in seconds, not after the clubs' refresh
+                SettingsActivity.this.changed(on ? null : whenRefreshed);
+                refreshStatus();
+                if (!on) checkHiddenRows();
+            }
+            public void changed() { SettingsActivity.this.changed(); }
+            public void skeletons(boolean on) { SettingsActivity.this.skeletons(on); }
+            public void focus(View v) { v.requestFocus(); main.reveal(v, true); }
+        };
     }
 }

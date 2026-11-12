@@ -234,6 +234,8 @@ final class SettingsViews {
         private List<String> hintLines = new ArrayList<>();
         private final float width, minH;
         private float height;
+        /** The chip room kept whatever the value (reserve()): 0 for none, the chip's own width. */
+        private float reserved;
 
         OptionRow(Context c, String key, String title, String hint, float width) { this(c, key, title, hint, width, H); }
 
@@ -262,8 +264,22 @@ final class SettingsViews {
 
         private float chipW() { return value.isEmpty() ? 0 : Ui.paint(Ui.MEDIUM, 28, 0).measureText(value) + 56; }
 
+        /**
+         * Keeps the room of the widest of these values for the chip (QAS-7: a value cycled from "All" to "Numbered
+         * only" no longer narrows the hint, so the row never grows or shrinks). Returns true when the height changed.
+         */
+        boolean reserve(String... values) {
+            float w = 0;
+            for (String v : values) if (v != null && !v.isEmpty()) w = Math.max(w, Ui.paint(Ui.MEDIUM, 28, 0).measureText(v) + 56);
+            reserved = w;
+            return relayout();
+        }
+
+        /** The chip's room: its own width, or the reserved one when wider. */
+        private float chipRoom() { return value.isEmpty() ? 0 : Math.max(chipW(), reserved); }
+
         private boolean relayout() {
-            float room = width - 2 * PAD - (value.isEmpty() ? 0 : chipW() + 40);
+            float room = width - 2 * PAD - (value.isEmpty() ? 0 : chipRoom() + 40);
             hintLines = hint.isEmpty() ? new ArrayList<String>() : lines(hint, textPaint(Ui.REGULAR, 26, 0), room);
             float was = height;
             height = Math.max(minH, hintLines.size() <= 1 ? minH : 2 * 26 + TITLE_LH + 4 + hintLines.size() * HINT_LH);
@@ -284,7 +300,7 @@ final class SettingsViews {
             float hl = hintLines.size() <= 1 ? Ui.lineHeight(Ui.REGULAR, 26) : HINT_LH;
             float block = TITLE_LH + (hintLines.isEmpty() ? 0 : 4 + hintLines.size() * hl);
             float top = (h - block) / 2;
-            float room = w - 2 * PAD - (value.isEmpty() ? 0 : chipW() + 40);
+            float room = w - 2 * PAD - (value.isEmpty() ? 0 : chipRoom() + 40);
             Paint t = Ui.paint(Ui.MEDIUM, 34, Ui.TXT);
             cv.drawText(Cards.ellipsize(t, title, room), PAD, Ui.baselineTop(Ui.MEDIUM, 34, top, TITLE_LH), t);
             Paint s = Ui.paint(Ui.REGULAR, 26, Ui.alpha(Ui.TXT, 0.62f));

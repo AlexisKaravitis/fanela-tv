@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.3.0 (12 November 2026)
+
+Formula 1 and UFC, next to your clubs. Updating keeps every setting, and football works as before until you follow
+one of them.
+
+- Follow Formula 1 or UFC in Settings > More sports. Each gets its own row on the TV's home screen, with the next
+  session or fight card and the latest result.
+- Every practice, qualifying, sprint and race, and every part of a fight card (early prelims, prelims, main card),
+  at its time in your time zone.
+- Where to watch, by country: in Greece ANT1 and ANT1+ for Formula 1, Magenta Sport 6 for UFC.
+- Results: the winner and the podium of each session, and how each fight ended (KO/TKO, submission or decision, with
+  the round and the time).
+- Favourites, all optional: up to two Formula 1 drivers or teams, which the cards then highlight in their team's
+  colour, and UFC fighters, whose bouts become the card's headline on any event. On the event screen, long-press OK on
+  a bout to follow one of its fighters.
+- In the app: the race weekend screen (the circuit, every session, the classification and the championships) and
+  the event screen (the whole fight card, bout by bout). Both open from the Club and Matchday layouts.
+- All five card styles draw Formula 1 and UFC, in Greek and in English.
+- Hide scores also hides Formula 1 and UFC results inside the app: no podium, winner, method or standings until you
+  switch it off.
+- While a session or a fight is live, the cards and the app say LIVE with the session or the bout. The lap and the
+  running order of a race, and the round of a fight, will follow in a later update, once they have been checked
+  against real races and events.
+- Fix: the row of a club you stop following is removed without making the TV's home screen crash.
+
 ## 1.2.1 (12 November 2026)
 
 - Every card shows the competition again, quietly at the top left (EuroLeague, Super League, Champions League...),

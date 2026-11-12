@@ -167,6 +167,8 @@ final class I18n {
         p("basketball", "Μπάσκετ", "Basketball"); p("basketball_hint", "Δείξε και τους αγώνες μπάσκετ των ομάδων", "Also show the clubs' basketball games");
         p("rows", "Σειρές στην αρχική οθόνη", "Home-screen rows");
         p("rows_hint", "Μια σειρά για κάθε ομάδα στην αρχική οθόνη της τηλεόρασης", "A row for each club on the TV's home screen");
+        p("rows_hint_sports", "Μια σειρά για κάθε ομάδα και άθλημα στην αρχική οθόνη της τηλεόρασης",
+            "A row for each club and sport on the TV's home screen");
         p("rows_unsupported", "Η αρχική οθόνη αυτής της τηλεόρασης δεν δείχνει σειρές από εφαρμογές (π.χ. Google TV). Άνοιξε το Fanela για το πρόγραμμα.",
             "This TV's home screen doesn't show rows from apps (Google TV, for example). Open Fanela to see your fixtures.");
         p("about", "Σχετικά", "About");
@@ -606,5 +608,38 @@ final class I18n {
     static String time(long t) {
         boolean h = clock24();
         return new SimpleDateFormat(h ? "HH:mm" : "h:mm a", h || us ? Locale.US : locale()).format(new java.util.Date(t));
+    }
+
+    // ---------- Formula 1 and UFC: Settings words and credits (stream G; SPEC-F1-UFC §10) ----------
+    // People stay in Latin script in both languages (SPEC-F1-UFC §4.3); "Formula 1" and "UFC" are written as they are.
+    static {
+        p("clubs_sports", "Οι ομάδες και τα αθλήματά σου", "Your clubs and sports");
+        p("sports_group", "Άλλα αθλήματα", "More sports");
+        p("sport_f1", "Formula 1", "Formula 1"); p("sport_ufc", "UFC", "UFC");
+        p("f1_hint", "Ακολούθησε τη Formula 1 για μια σειρά με τα Γκραν Πρι. Ο οδηγός ή η ομάδα σου είναι προαιρετικά: αλλάζουν μόνο τι αναδεικνύει η κάρτα.",
+            "Follow Formula 1 for a row of race weekends. A driver or a team is optional: it only changes what the card highlights.");
+        p("ufc_hint", "Ακολούθησε το UFC για μια σειρά με τις διοργανώσεις του. Οι μαχητές είναι προαιρετικοί: όποτε αγωνίζονται, η κάρτα δείχνει τον δικό τους αγώνα.",
+            "Follow UFC for a row of events. Fighters are optional: their bouts become the card's headline, on any event.");
+        p("f1_following", "Ακολουθείς · κάθε Γκραν Πρι", "Following · every race weekend");
+        p("ufc_following", "Ακολουθείς", "Following");
+        p("sport_not_followed", "Δεν ακολουθείς", "Not followed");
+        p("f1_focus_label", "Οδηγοί · η επιλογή σου (προαιρετικά, έως 2)", "Drivers · your focus (optional, up to 2)");
+        p("focus_max", "Έως δύο. Βγάλε πρώτα μία επιλογή.", "Two at most. Remove one first.");
+        p("f1_failed", "Δεν φορτώθηκαν οι οδηγοί και οι ομάδες. Έλεγξε τη σύνδεση και άνοιξε ξανά τη Formula 1.",
+            "The drivers and teams didn't load. Check the connection and open Formula 1 again.");
+        p("ufc_events", "Διοργανώσεις", "Events");
+        // two set lines (no orphan "UFC 335 …" alone on the second): OptionRow breaks at the \n
+        p("ufc_events_hint", "Όλες: τα αριθμημένα UFC και τα Fight Night.\nΜόνο αριθμημένες: UFC 334, UFC 335 …",
+            "All: numbered events and Fight Nights.\nNumbered only: UFC 334, UFC 335 …");
+        p("scope_all", "Όλες", "All"); p("scope_numbered", "Μόνο αριθμημένες", "Numbered only");
+        p("ufc_fighters_label", "Μαχητές · προαιρετικά · από τις επόμενες κάρτες", "Fighters · optional · from the next cards");
+        p("ufc_fighters_follow_first", "Ακολούθησε το UFC για να διαλέξεις μαχητές από τις επόμενες κάρτες.",
+            "Follow UFC to choose fighters from the next cards.");
+        p("ufc_fighters_none", "Οι μαχητές εμφανίζονται εδώ μόλις ανακοινωθούν οι επόμενες κάρτες.",
+            "The fighters show here once the next cards are announced.");
+        p("card_style_hint_event", "Πώς σχεδιάζει το Fanela τις κάρτες σου στην αρχική οθόνη της τηλεόρασης και στην εφαρμογή. Οι προεπισκοπήσεις δείχνουν την επόμενη διοργάνωση που ακολουθείς.",
+            "How Fanela draws your cards on the TV's home screen and in the app. The previews show the next event you follow.");
+        p("credits_sports", "Formula 1 και UFC: πρόγραμμα, αποτελέσματα, κατατάξεις και μαχητές από το ESPN. Περιγράμματα πιστών: bacinger/f1-circuits στο GitHub (MIT License).",
+            "Formula 1 and UFC: schedules, results, standings and fighters from ESPN. Circuit outlines: bacinger/f1-circuits on GitHub (MIT License).");
     }
 }

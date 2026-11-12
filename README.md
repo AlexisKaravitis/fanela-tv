@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/AlexisKaravitis/fanela-tv/releases/latest"><img alt="Latest release" src="https://img.shields.io/badge/release-v1.2.1-1565c0"></a>
+  <a href="https://github.com/AlexisKaravitis/fanela-tv/releases/latest"><img alt="Latest release" src="https://img.shields.io/badge/release-v1.3.0-1565c0"></a>
   <img alt="Android TV 8.0+" src="https://img.shields.io/badge/Android%20TV-8.0%2B-3ddc84">
   <img alt="Languages" src="https://img.shields.io/badge/languages-English%20%7C%20%CE%95%CE%BB%CE%BB%CE%B7%CE%BD%CE%B9%CE%BA%CE%AC-555">
   <img alt="No ads" src="https://img.shields.io/badge/ads-none-555">
@@ -11,10 +11,10 @@
 
 # Fanela
 
-Fanela is an Android TV app for people who follow football and basketball clubs, in Greece and beyond. You pick your
-clubs once, from the Super League to the Premier League, LaLiga or the NBA, and the app shows their next matches, live
-scores and results, and where each game is on: in Greece the exact channel with its number on Magenta TV, elsewhere
-the channels that hold the competition's TV rights in your country.
+Fanela is an Android TV app for people who follow football and basketball clubs, in Greece and beyond, and Formula 1
+and UFC too. You pick your clubs once, from the Super League to the Premier League, LaLiga or the NBA, and the app
+shows their next matches, live scores and results, and where each game is on: in Greece the exact channel with its
+number on Magenta TV, elsewhere the channels that hold the competition's TV rights in your country.
 
 It is made for the remote: your club's next match large on the screen, in your club's colours, and nothing to sign
 up for.
@@ -49,6 +49,10 @@ up for.
 - **Five card styles.** Signature, Clean, Kit, Ticket and Clash, for the home-screen rows and the cards in the app,
   with live previews in Settings > Appearance. A switch hides scores on the home screen, for matches you'll watch
   later.
+- **Formula 1 and UFC.** Follow them in Settings > More sports. Each gets its own row on the TV's home screen and
+  its own place in the app: every session of a race weekend and every part of a fight card at your local time, where
+  to watch (in Greece ANT1 and ANT1+, Magenta Sport 6), results, and the race weekend and fight card screens. Pick
+  up to two drivers or teams, or the fighters you follow, and the cards put them first.
 - **Your club's colours.** Choose a favourite club and the app's accents, its logo and even its tile on the TV take
   on that club's kit.
 - **English or Greek**, switchable at any time, with Greek names for the clubs of every league.
@@ -69,6 +73,15 @@ up for.
 | ![A match with no known TV partner](docs/screenshots/check-guide.png) | ![Fanela in Greek](docs/screenshots/home-greek.png) |
 | No official list for your country: the app says so. | The whole app in Greek, here in PAOK's colours. |
 
+### Formula 1 and UFC
+
+| | |
+|---|---|
+| ![The Las Vegas Grand Prix weekend](docs/screenshots/f1-weekend.png) | ![The UFC 334 fight card](docs/screenshots/ufc-event.png) |
+| The race weekend: every session at your time, where to watch it and the championship. | The fight card, bout by bout, with records and the channel for each part. |
+| ![Formula 1 and UFC rows on the home screen](docs/screenshots/home-screen-sports.png) | |
+| Their own rows on the TV's home screen, next to your clubs. | |
+
 ### Card styles on the TV's home screen
 
 | | |
@@ -84,9 +97,9 @@ up for.
 
 Fanela is not on Google Play. You install the APK yourself, which takes about five minutes the first time.
 
-1. Download `fanela-1.2.1.apk` from the [Releases page](https://github.com/AlexisKaravitis/fanela-tv/releases/latest).
+1. Download `fanela-1.3.0.apk` from the [Releases page](https://github.com/AlexisKaravitis/fanela-tv/releases/latest).
 2. Copy it to the TV with **Send Files to TV** or a USB stick, or install it from a computer with
-   `adb install fanela-1.2.1.apk`.
+   `adb install fanela-1.3.0.apk`.
 3. Open Fanela, choose a language and your country, pick your clubs and press **Done**.
 
 The [install guide](docs/INSTALL.md) has every step, including how to allow installs from unknown sources on Sony,
@@ -110,6 +123,9 @@ settings stay. Updating from 1.0 keeps everything as it was and sets the country
 | TV partners in 14 other countries | The leagues', UEFA's, the NBA's and EuroLeague's own broadcaster pages, kept in `res/raw/broadcasters.json` with the date each was checked |
 | Gaps in those lists | Wikipedia's broadcaster lists (CC BY-SA 4.0), in `res/raw/broadcasters_wikipedia.json`; an official row always wins |
 | Crests | the feeds above, SofaScore for any that are missing |
+| Formula 1 and UFC: schedules, results, standings and fighters | ESPN |
+| Formula 1 and UFC TV partners | The broadcasters' and the press's announcements of each deal, kept in `res/raw/sport_rights.json` |
+| Circuit outlines | bacinger/f1-circuits on GitHub (MIT License) |
 
 None of these is an official, guaranteed service. If one of them changes, that part of the app can stop working until
 Fanela is updated. Each source is handled on its own, so the rest keeps working, and a card says "Not updated" when
@@ -123,6 +139,8 @@ its data is more than 6 hours old.
   numbers; your provider's guide has the last word. The broadcaster lists need checking each August and January.
   The Super League, Brasileirão, Argentine Primera and Saudi Pro League publish no list for other countries.
 - **Basketball outside Greece** covers the NBA, the EuroLeague and the EuroCup.
+- **Formula 1 and UFC while live** show LIVE with the session or the bout. The lap and running order of a race and the
+  round of a fight come in a later update.
 - **Home-screen rows** only appear on the classic Android TV home screen (for example Sony sets from before 2021,
   Nvidia Shield, Mi Box). Google TV and most operator launchers don't show rows from apps.
 - **The TV tile in club colours** shows once the TV's home screen reloads; on some TVs that takes a restart.
@@ -135,7 +153,7 @@ its data is more than 6 hours old.
 
 | | |
 |---|---|
-| `main` | The current release, 1.2.1 (tag `v1.2.1`). |
+| `main` | The current release, 1.3.0 (tag `v1.3.0`). |
 | `v1.0.0` | The first release, kept as a tag. |
 
 Every release and its APK is on the [Releases page](https://github.com/AlexisKaravitis/fanela-tv/releases).
@@ -160,7 +178,7 @@ your real setup. Release builds are signed with a key that is not in the reposit
 | Path | What |
 |---|---|
 | `app/src/main/java/app/fanela/tv` | The app: plain Java, framework Views, no third-party libraries |
-| `app/src/main/res/raw` | Bundled data: the channel line-up, the broadcaster tables and the font licences |
+| `app/src/main/res/raw` | Bundled data: the channel line-up, the broadcaster tables, the Formula 1 and UFC TV rights, the circuit outlines and the licences |
 | `app/src/debug` | Debug-only tools: card renders for every state and style, fixed home screens for screenshots, and a data audit for every club |
 | `app/src/test` | Unit tests |
 | `design/make_brand.py` | Draws the shirt logo, the app icon and TV banner in every kit colour, and the store graphics |

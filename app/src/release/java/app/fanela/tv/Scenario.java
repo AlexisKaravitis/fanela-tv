@@ -13,6 +13,10 @@ final class Scenario {
     static final class Snapshot {
         List<Match> matches;
         List<String> follow;
+        /** The followed sports' events, the sports and their choices (F1 / UFC). */
+        List<SportEvent> events;
+        List<String> sports;
+        SportPrefs prefs;
         String favourite, mode, lang;
         long now, savedAt;
     }

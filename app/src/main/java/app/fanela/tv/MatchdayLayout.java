@@ -29,6 +29,11 @@ import java.util.concurrent.Executors;
  * 120 ms); going below row 1 compresses the stage to a 240 px ribbon while the rows rise under it, so the focused card
  * is never more than a row from its stage. Rows scroll by moving their views (200 ms), the cards are bitmaps drawn once
  * per state (MatchdayCards), so nothing heavy happens per frame.
+ *
+ * A followed sport (F1, UFC) adds a row after the clubs' (MatchdayModel.sport), labelled with its monogram disc; its
+ * cards are drawn by EventStyles in the viewer's style, and a focused one is staged by EventStage (the sport's
+ * background, two identity rows) instead of the club stage's words. OK on one opens the event screen (a live one:
+ * its channel's app when it is on the TV).
  */
 final class MatchdayLayout implements HomeLayout {
     /**
@@ -85,6 +90,12 @@ final class MatchdayLayout implements HomeLayout {
     private View park;
     private MatchdayViews.StageView stageView;
     private MatchdayViews.StageInfo info;
+    /** The stage's words for an F1 session or a UFC card (shown instead of info while one is focused). */
+    private EventStage.Info eventInfo;
+    /** EventStage's images for the event cards visited lately. */
+    private final Map<String, EventStage.Art> evArt = java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<String, EventStage.Art>(16, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<String, EventStage.Art> e) { return size() > 16; }
+    });
     private AppViews.Masthead mast;
     private MatchdayViews.Chip chip;
     private MatchdayViews.PeekFade peek;
@@ -137,9 +148,13 @@ final class MatchdayLayout implements HomeLayout {
             p.stages.put(d.club.id, MatchdayStage.get(c, d.club.id, d.colors, MatchdayStage.Mode.CLUB));
             p.labelCrests.put(d.club.id, AppArt.crest(c, d.club.crest, d.club.name, 36, true));
         }
+        for (SportModel.SportData d : m.sports) {
+            p.stages.put(d.id(), sportStage(c, d));
+            p.labelCrests.put(d.id(), SportViews.monogramDecal(c, d.sport, 36));
+        }
         for (MatchdayModel.Row r : p.rows) for (MatchdayModel.Item it : r.items) {
-            p.cardKeys.put(it.key(), MatchdayCards.key(c, style, it.club.club, it.m, it.club.stale, m.now));
-            anyLive |= it.live();
+            p.cardKeys.put(it.key(), cardKey(c, style, it, m.now));
+            anyLive |= it.live() && it.ev == null;
         }
         if (anyLive) p.live = MatchdayStage.get(c, "", null, MatchdayStage.Mode.LIVE);
         firstStage(c, p);
@@ -152,13 +167,13 @@ final class MatchdayLayout implements HomeLayout {
             for (int i = from; i < Math.min(row.items.size(), from + VISIBLE + 1); i++) {
                 MatchdayModel.Item it = row.items.get(i);
                 if (r == 0 || (p.rows.get(0).items.isEmpty() && r == 1))
-                    jobs.add(new MatchdayCards.Job(p.cardKeys.get(it.key()), it.club.club, it.m, it.club.stale, m.now));
+                    jobs.add(MatchdayCards.job(p.cardKeys.get(it.key()), it, m.now));
                 if (r == 0 || i == row.start) staged.add(it);
             }
         }
         String f = focusedItem;
         for (MatchdayModel.Row r : p.rows) for (MatchdayModel.Item it : r.items) if (it.key().equals(f)) staged.add(0, it);
-        for (MatchdayModel.Item it : staged) makeArt(c, it, m.now);
+        for (MatchdayModel.Item it : staged) { if (it.ev != null) eventArt(c, it); else makeArt(c, it, m.now); }
         k.drawNow(jobs);
         pending = p;
     }
@@ -199,16 +214,21 @@ final class MatchdayLayout implements HomeLayout {
         String saved = sp.getString("club", null);
         String id = firstClub(saved, p.model);
         p.firstClub = id;
-        p.firstLive = id.equals(saved) && firstLive(sp.getLong("live_at", 0), p.model.now);
+        p.firstLive = id.equals(saved) && firstLive(sp.getLong("live_at", 0), p.model.now) && p.model.club(id) != null;
         HomeModel.ClubData d = p.model.club(id);
-        if (!p.stages.containsKey(id)) p.stages.put(id, MatchdayStage.get(c, id, d.colors, MatchdayStage.Mode.CLUB));
+        if (!p.stages.containsKey(id)) {
+            SportModel.SportData sd = p.model.sport(id);
+            if (d != null) p.stages.put(id, MatchdayStage.get(c, id, d.colors, MatchdayStage.Mode.CLUB));
+            else if (sd != null) p.stages.put(id, sportStage(c, sd));
+        }
         if (p.firstLive && p.live == null) p.live = MatchdayStage.get(c, "", null, MatchdayStage.Mode.LIVE);
     }
 
     /** The club whose stage opens: the saved launch card's club while it is followed, else the favourite, else the first. */
     static String firstClub(String saved, HomeModel m) {
-        if (saved != null && m.club(saved) != null) return saved;
+        if (saved != null && (m.club(saved) != null || m.sport(saved) != null)) return saved;
         HomeModel.ClubData fav = m.club(m.favourite);
+        if (fav == null && m.clubs.isEmpty()) return m.sports.get(0).id();  // sports alone
         return (fav != null ? fav : m.clubs.get(0)).club.id;
     }
 
@@ -224,7 +244,7 @@ final class MatchdayLayout implements HomeLayout {
         if (at == null || c == null) return;
         MatchdayModel.Item it = p.rows.get(at[0]).items.get(at[1]);
         SharedPreferences sp = stagePrefs(c);
-        String id = it.club.club.id;
+        String id = it.stageId();
         boolean same = id.equals(sp.getString("club", null));
         long was = sp.getLong("live_at", 0);
         long liveAt = !it.live() ? 0 : same && was > 0 ? was : p.model.now;
@@ -250,6 +270,28 @@ final class MatchdayLayout implements HomeLayout {
         boolean app = it.live() && m.channelKnown && m.channelApp != null && HomeRows.installed(c, m.channelApp);
         a.hint = app ? I18n.f("open_app", Cards.appName(m.channelApp)) : AppText.t("details");
         art.put(it.key(), a);
+        return a;
+    }
+
+    /** A card's cache key: a club's match card, or a sport's event card. */
+    static String cardKey(Context c, String style, MatchdayModel.Item it, long now) {
+        if (it.ev != null) return MatchdayCards.key(style, it.ev, now);
+        return MatchdayCards.key(c, style, it.club.club, it.m, it.club.stale, now);
+    }
+
+    /** A sport's stage background (its hero's circuit as the watermark). */
+    private static Bitmap sportStage(Context c, SportModel.SportData d) {
+        SportEvent e = d.hero != null ? d.hero.e : d.events.isEmpty() ? null : d.events.get(0);
+        return EventStage.background(c, d.sport, SportViews.outline(c, e));
+    }
+
+    /** EventStage's images for an event card (made again when the event changes). Any thread. */
+    private EventStage.Art eventArt(Context c, MatchdayModel.Item it) {
+        EventStage.Art a = evArt.get(it.key());
+        String sig = it.ev.e.signature() + it.ev.sessionId + it.ev.last;
+        if (a != null && sig.equals(a.sig)) return a;
+        a = EventStage.art(c, it.ev);
+        evArt.put(it.key(), a);
         return a;
     }
 
@@ -287,6 +329,9 @@ final class MatchdayLayout implements HomeLayout {
         root.addView(stageView, AppViews.at(c, 0, 0, Ui.W, MatchdayStage.HEIGHT));
         info = new MatchdayViews.StageInfo(c);
         root.addView(info, AppViews.at(c, 0, 0, Ui.W, MatchdayStage.HEIGHT));
+        eventInfo = new EventStage.Info(c);
+        eventInfo.setVisibility(View.GONE);
+        root.addView(eventInfo, AppViews.at(c, 0, 0, Ui.W, MatchdayStage.HEIGHT));
         emptyPanel = new MatchdayViews.EmptyPanel(c);
         root.addView(emptyPanel, AppViews.at(c, 96, 140, 1728, 504));
         choose = new AppViews.Button(c, I18n.t("choose_clubs"));
@@ -316,7 +361,7 @@ final class MatchdayLayout implements HomeLayout {
             p.model = m;
             p.rows = MatchdayModel.rows(m);
             String style = cards(c).style() == null ? Appearance.cardStyle(c) : cards.style();
-            for (MatchdayModel.Row r : p.rows) for (MatchdayModel.Item it : r.items) p.cardKeys.put(it.key(), MatchdayCards.key(c, style, it.club.club, it.m, it.club.stale, m.now));
+            for (MatchdayModel.Row r : p.rows) for (MatchdayModel.Item it : r.items) p.cardKeys.put(it.key(), cardKey(c, style, it, m.now));
         }
         String was = focusKey();
         shown = p;
@@ -363,6 +408,7 @@ final class MatchdayLayout implements HomeLayout {
         int main = on ? View.GONE : View.VISIBLE, panel = on ? View.VISIBLE : View.GONE;
         rowsClip.setVisibility(main);
         info.setVisibility(main);
+        if (on) eventStage(false);
         peek.setVisibility(main);
         emptyPanel.setVisibility(panel);
         choose.setVisibility(panel);
@@ -451,19 +497,21 @@ final class MatchdayLayout implements HomeLayout {
 
     private void bindRow(RowHolder h, Prepared p) {
         MatchdayModel.Row row = h.row;
-        if (row.club == null) h.label.set(AppText.t("next_latest"), null, row.loading, 260);
+        if (row.sport != null) h.label.set(row.sport.label, p.labelCrests.get(row.id), row.loading, 200);
+        else if (row.club == null) h.label.set(AppText.t("next_latest"), null, row.loading, 260);
         else h.label.set(row.club.club.label(), p.labelCrests.get(row.club.club.id), row.loading, 200);
         for (int i = 0; i < h.cells.size(); i++) {
             MatchdayViews.CardCell cell = h.cells.get(i);
             if (row.loading) cell.skeleton();
             else if (row.items.isEmpty()) {
                 String word = emptyWord(row, p.model);
-                cell.line(I18n.t(lineWord(word)), spoken(row.club == null ? AppText.t("next_latest") : row.club.club.label(), I18n.t(word)));
+                cell.line(I18n.t(lineWord(word)), spoken(row.sport != null ? row.sport.label : row.club == null ? AppText.t("next_latest") : row.club.club.label(), I18n.t(word)));
             }
             else {
                 MatchdayModel.Item it = row.items.get(i);
                 String key = p.cardKeys.get(it.key());
                 cell.bind(it, key, p.model.now);
+                if (it.ev != null) cell.setContentDescription(SportText.speak(it.ev.e, it.ev.session(), p.model.now, it.ev.sport.hidden));
             }
         }
     }
@@ -475,6 +523,7 @@ final class MatchdayLayout implements HomeLayout {
      */
     static String emptyWord(MatchdayModel.Row row, HomeModel m) {
         if (row.club != null) return row.club.kind == HomeModel.Kind.FAILED ? "load_failed" : "no_fixtures";
+        if (row.sport != null) return "no_fixtures";
         boolean failed = m != null && !m.clubs.isEmpty();
         if (failed) for (HomeModel.ClubData d : m.clubs) failed &= d.kind == HomeModel.Kind.FAILED;
         return failed ? "load_failed" : "no_fixtures";
@@ -583,6 +632,7 @@ final class MatchdayLayout implements HomeLayout {
         rowsTy = ty;
         stageView.ribbon(r);
         info.ribbon(r);
+        if (eventInfo != null) eventInfo.ribbon(r);
         rowsInner.setTranslationY(ty * s);
     }
 
@@ -590,6 +640,12 @@ final class MatchdayLayout implements HomeLayout {
     private void open(MatchdayViews.CardCell cell) {
         if (cell.item == null) return;
         MatchdayModel.Item it = cell.item;
+        if (it.ev != null) {  // a sport's card: its live session's app when it is on the TV, else the event screen
+            String app = it.live() ? SportViews.installedApp(c, it.ev.session()) : null;
+            if (app != null && OpenActivity.launch(c, app)) return;
+            host.openEvent(it.ev.e, it.ev.sessionId);
+            return;
+        }
         if (it.live()) host.openLive(it.m, it.club.club);
         else host.openMatch(it.m, it.club.club);
     }
@@ -617,6 +673,7 @@ final class MatchdayLayout implements HomeLayout {
         RowHolder h = cell == null ? null : holderOf(cell);
         if (cell == null) {  // the chip or nothing focused: the stage keeps its card; while loading, the skeleton
             boolean loading = !rows.isEmpty() && rows.get(0).row.loading;
+            eventStage(false);
             if (loading) {
                 MatchdayViews.Stage st = new MatchdayViews.Stage();
                 st.kind = HomeModel.Kind.LOADING;
@@ -625,7 +682,7 @@ final class MatchdayLayout implements HomeLayout {
                 Bitmap bg = shown.firstLive && shown.live != null ? shown.live : shown.stages.get(shown.firstClub);
                 if (bg == null) bg = shown.stages.get(firstClub(null, shown.model));
                 stageView.show(bg, animate);
-            } else if (info.current().item != null) refresh();
+            } else if (info.current().item != null || eventInfo.getVisibility() == View.VISIBLE) refresh();
             else {
                 int[] at = MatchdayModel.launch(shown.rows);
                 if (at != null) showItem(shown.rows.get(at[0]).items.get(at[1]), animate);
@@ -633,7 +690,21 @@ final class MatchdayLayout implements HomeLayout {
             return;
         }
         if (cell.item == null) {  // a club with nothing to list (row 1 too, when no club has anything)
+            eventStage(false);
             MatchdayModel.Row row = h == null ? null : h.row;
+            if (row != null && row.sport != null) {  // a sport with nothing listed: its mark and the sentence
+                MatchdayViews.Stage st = new MatchdayViews.Stage();
+                st.kind = HomeModel.Kind.NONE;
+                st.key = "none:" + row.id;
+                st.home = row.sport.label;
+                st.message = I18n.t(emptyWord(row, shown.model));
+                st.messageShort = I18n.t(lineWord(emptyWord(row, shown.model)));
+                st.mine = SportViews.monogramDecal(c, row.sport.sport, 150);
+                st.mineSmall = st.mine;
+                info.show(st, animate);
+                stageView.show(shown.stages.get(row.id), animate);
+                return;
+            }
             HomeModel.ClubData cd = row == null ? null : row.club != null ? row.club : shown.model.club(shown.model.favourite);
             if (cd == null && !shown.model.clubs.isEmpty()) cd = shown.model.clubs.get(0);
             if (cd == null) return;
@@ -673,7 +744,40 @@ final class MatchdayLayout implements HomeLayout {
         return a;
     }
 
+    /** Shows the event stage's words (an F1 session, a UFC card) instead of the club stage's, or back. */
+    private void eventStage(boolean on) {
+        if (eventInfo == null) return;
+        eventInfo.setVisibility(on ? View.VISIBLE : View.GONE);
+        info.setVisibility(on || empty ? View.INVISIBLE : View.VISIBLE);
+        if (empty) info.setVisibility(View.GONE);
+    }
+
+    /** Stages a sport's card: its background and EventStage's words; the images are made in the background first. */
+    private void showEvent(final MatchdayModel.Item it, boolean animate) {
+        final EventStage.Art a = evArt.get(it.key());
+        String sig = it.ev.e.signature() + it.ev.sessionId + it.ev.last;
+        if (a == null || !sig.equals(a.sig)) {
+            if (artWanted.add(it.key())) {
+                background(new Runnable() { public void run() {
+                    try { eventArt(c, it); } catch (Throwable t) { android.util.Log.w("Fanela", "event stage art", t); }
+                    artWanted.remove(it.key());
+                    ui.post(new Runnable() { public void run() {
+                        MatchdayViews.CardCell f = focusedCell();
+                        if (f != null && f.item != null && f.item.key().equals(it.key())) stage(true);
+                    }});
+                }});
+            }
+            if (a == null) return;
+        }
+        eventStage(true);
+        eventInfo.show(it.ev, a, shown.model.now);
+        stageView.show(shown.stages.get(it.stageId()), animate);
+        livePulse();
+    }
+
     private void showItem(final MatchdayModel.Item it, boolean animate) {
+        if (it.ev != null) { showEvent(it, animate); return; }
+        eventStage(false);
         final StageArt a = art.get(it.key());
         // not made yet, or made before a crest or logo was on the TV: made (again) in the background, then staged
         if (a == null || !it.m.signature().equals(a.sig) || a.missing) {
@@ -706,6 +810,10 @@ final class MatchdayLayout implements HomeLayout {
 
     /** A live update or a refresh: the same card's stage with its new words, in place. */
     private void refresh() {
+        if (eventInfo != null && eventInfo.getVisibility() == View.VISIBLE) {
+            for (MatchdayModel.Row r : shown.rows) for (MatchdayModel.Item it : r.items) if (it.key().equals(eventInfo.key)) { showItem(it, false); return; }
+            return;
+        }
         MatchdayViews.Stage cur = info.current();
         if (cur.item == null) return;
         for (MatchdayModel.Row r : shown.rows) for (MatchdayModel.Item it : r.items) if (it.key().equals(cur.item.key())) { showItem(it, false); return; }
@@ -761,7 +869,7 @@ final class MatchdayLayout implements HomeLayout {
                 MatchdayModel.Item it = h.row.items.get(i);
                 String key = shown.cardKeys.get(it.key());
                 if (key == null || !seen.add(key)) continue;
-                jobs.add(new MatchdayCards.Job(key, it.club.club, it.m, it.club.stale, shown.model.now));
+                jobs.add(MatchdayCards.job(key, it, shown.model.now));
             }
         }
         k.want(jobs);
@@ -840,7 +948,7 @@ final class MatchdayLayout implements HomeLayout {
 
     @Override public String selected() {
         MatchdayViews.CardCell f = focusedCell();
-        return f != null && f.item != null ? f.item.club.club.id : null;
+        return f != null && f.item != null && f.item.club != null ? f.item.club.club.id : null;
     }
 
     @Override public void select(String clubId) { }
@@ -948,7 +1056,7 @@ final class MatchdayLayout implements HomeLayout {
      * on: one paint alpha, and only the stage's words are redrawn (in 40 steps, not at every frame).
      */
     private void livePulse() {
-        boolean on = !paused && !empty && info != null && info.current().kind == HomeModel.Kind.LIVE;
+        boolean on = !paused && !empty && info != null && info.getVisibility() == View.VISIBLE && info.current().kind == HomeModel.Kind.LIVE;
         if (!on) {
             if (livePulse != null) { livePulse.cancel(); livePulse = null; }
             if (info != null && info.dot != 1) { info.dot = 1; info.invalidate(); }

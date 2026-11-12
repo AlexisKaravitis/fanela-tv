@@ -36,7 +36,7 @@ public class OpenActivity extends Activity {
             try { c.startActivity(l.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return true; } catch (Exception ignored) { }
         }
         I18n.load(c);
-        Toast.makeText(c, I18n.f("app_missing", Cards.appName(pkg)), Toast.LENGTH_LONG).show();
+        Toast.makeText(c, I18n.f("app_missing", SportWhere.appName(pkg)), Toast.LENGTH_LONG).show();
         return false;
     }
 }

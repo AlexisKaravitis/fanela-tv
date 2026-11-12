@@ -1,0 +1,87 @@
+{"updated": "2026-11-12",
+ "about": "Where F1 sessions and UFC card segments are on, per country (SportWhere, F1-UFC-ARCHITECTURE §4.1). Hand-kept from the official pages in sources; recheck every January and August. The first row that matches a session wins: specific rows first. kinds (F1: FP1 FP2 FP3 SQ SPRINT QUAL RACE OTHER) or segments (UFC: EARLY PRELIMS MAIN), * for all; events: ESPN event ids, empty or absent = every event; from/until: yyyy-MM-dd, until covers that whole day, no until: no end date published (conf says how sure); app: Greek rows only (the app allowlist knows only the Greek apps); service: a streaming service, drawn as a name only and never matched to a MagentaTV channel; conf: high, medium or low. A string value copies another country's rows. A country with no row says \"check your provider's guide\".",
+ "sports": {
+  "f1": {"checked": "2026-11-12",
+   "sources": [
+    "https://www.formula1.com/en/information/f1-broadcasters.1eqG3L8AlJATj7icjBtrfN",
+    "https://www.sportal.gr/mixanokinitos-athlitismos/article/formula-1-ayto-einai-to-kanali-poy-tha-metadidei-toys-agones-gia-tin-epomeni-trietia-2025111919040387742",
+    "https://www.gocar.gr/news/races/53077,Poy_8a_deite_dwrean_to_GP_ths_Aystralias.html",
+    "https://play.google.com/store/apps/details?id=gr.antenna.ant1.screen",
+    "https://www.cbn.com.cy/article/124958",
+    "https://www.blackbookmotorsport.com/news/f1-sky-sports-uk-ireland-italy-tv-extension-may-2026/",
+    "https://www.formula1.com/en/latest/article/apple-becomes-broadcast-partner-for-formula-1-in-the-united-states.gtHt80hxS64ZMYxi36wAB"],
+   "countries": {
+    "GR": [
+     {"kinds": ["RACE", "SPRINT"], "on": ["ANT1"], "app": "gr.cosmote.cosmotetv.androidtv", "from": "2026-01-01", "until": "2028-12-31", "conf": "high",
+      "src": "https://www.sportal.gr/mixanokinitos-athlitismos/article/formula-1-ayto-einai-to-kanali-poy-tha-metadidei-toys-agones-gia-tin-epomeni-trietia-2025111919040387742"},
+     {"kinds": ["*"], "on": ["ANT1+"], "app": "gr.antenna.ant1.screen", "service": true, "from": "2026-01-01", "until": "2028-12-31", "conf": "high",
+      "src": "https://www.gocar.gr/news/races/53077,Poy_8a_deite_dwrean_to_GP_ths_Aystralias.html"}],
+    "CY": [
+     {"kinds": ["QUAL", "SPRINT", "RACE"], "on": ["Omega TV"], "from": "2026-01-01", "until": "2028-12-31", "conf": "high",
+      "src": "https://www.cbn.com.cy/article/124958"}],
+    "GB": [
+     {"kinds": ["*"], "on": ["Sky Sports F1"], "from": "2026-01-01", "until": "2034-12-31", "conf": "high",
+      "src": "https://www.blackbookmotorsport.com/news/f1-sky-sports-uk-ireland-italy-tv-extension-may-2026/"}],
+    "IE": "GB",
+    "US": [
+     {"kinds": ["*"], "on": ["Apple TV"], "service": true, "from": "2026-01-01", "until": "2030-12-31", "conf": "high",
+      "src": "https://www.formula1.com/en/latest/article/apple-becomes-broadcast-partner-for-formula-1-in-the-united-states.gtHt80hxS64ZMYxi36wAB"}],
+    "DE": [
+     {"kinds": ["*"], "on": ["Sky Sport F1"], "from": "2026-01-01", "conf": "medium",
+      "src": "https://www.formula1.com/en/information/f1-broadcasters.1eqG3L8AlJATj7icjBtrfN"}],
+    "AT": [
+     {"kinds": ["*"], "on": ["ServusTV", "ORF", "Sky Sport F1"], "from": "2026-01-01", "conf": "medium",
+      "src": "https://www.formula1.com/en/information/f1-broadcasters.1eqG3L8AlJATj7icjBtrfN"}],
+    "ES": [
+     {"kinds": ["*"], "on": ["DAZN"], "service": true, "from": "2026-01-01", "until": "2026-12-31", "conf": "high",
+      "src": "https://www.formula1.com/en/information/f1-broadcasters.1eqG3L8AlJATj7icjBtrfN"}],
+    "IT": [
+     {"kinds": ["*"], "on": ["Sky Sport F1"], "from": "2026-01-01", "until": "2032-12-31", "conf": "high",
+      "src": "https://www.blackbookmotorsport.com/news/f1-sky-sports-uk-ireland-italy-tv-extension-may-2026/"}],
+    "FR": [
+     {"kinds": ["*"], "on": ["Canal+"], "from": "2026-01-01", "until": "2029-12-31", "conf": "medium",
+      "src": "https://www.formula1.com/en/information/f1-broadcasters.1eqG3L8AlJATj7icjBtrfN"}]}},
+  "ufc": {"checked": "2026-11-12",
+   "sources": [
+    "https://www.ufc.com/news/how-watch-and-stream-ufc",
+    "https://www.magentatv.gr/sports",
+    "https://www.cbsnews.com/amp/miami/news/ufc-paramount-plus-deal-2026-streaming-cbs",
+    "https://www.sportbusiness.com/news/dazn-pins-down-ufc-in-germany-austria/"],
+   "countries": {
+    "GR": [
+     {"segments": ["MAIN"], "on": ["Magenta Sport 6"], "app": "gr.cosmote.cosmotetv.androidtv", "from": "2026-01-01", "until": "2026-12-31", "conf": "high",
+      "src": "https://www.magentatv.gr/sports"},
+     {"segments": ["PRELIMS", "EARLY"], "on": ["UFC Fight Pass"], "service": true, "from": "2026-01-01", "until": "2026-12-31", "conf": "low",
+      "src": "https://www.ufc.com/news/how-watch-and-stream-ufc"}],
+    "GB": [
+     {"segments": ["MAIN", "PRELIMS"], "on": ["TNT Sports"], "from": "2026-01-01", "conf": "high",
+      "src": "https://www.ufc.com/news/how-watch-and-stream-ufc"},
+     {"segments": ["EARLY"], "on": ["UFC Fight Pass"], "service": true, "from": "2026-01-01", "conf": "high",
+      "src": "https://www.ufc.com/news/how-watch-and-stream-ufc"}],
+    "IE": "GB",
+    "US": [
+     {"segments": ["*"], "on": ["Paramount+"], "service": true, "from": "2026-01-01", "until": "2032-12-31", "conf": "high",
+      "src": "https://www.cbsnews.com/amp/miami/news/ufc-paramount-plus-deal-2026-streaming-cbs"}],
+    "DE": [
+     {"segments": ["MAIN"], "on": ["DAZN"], "service": true, "from": "2026-01-01", "until": "2027-12-31", "conf": "high",
+      "src": "https://www.sportbusiness.com/news/dazn-pins-down-ufc-in-germany-austria/"},
+     {"segments": ["PRELIMS", "EARLY"], "on": ["UFC Fight Pass"], "service": true, "from": "2026-01-01", "until": "2027-12-31", "conf": "high",
+      "src": "https://www.ufc.com/news/how-watch-and-stream-ufc"}],
+    "AT": "DE",
+    "ES": [
+     {"segments": ["MAIN", "PRELIMS"], "on": ["HBO Max"], "service": true, "from": "2026-01-01", "conf": "high",
+      "src": "https://www.ufc.com/news/how-watch-and-stream-ufc"},
+     {"segments": ["EARLY"], "on": ["UFC Fight Pass"], "service": true, "from": "2026-01-01", "conf": "high",
+      "src": "https://www.ufc.com/news/how-watch-and-stream-ufc"}],
+    "IT": [
+     {"segments": ["MAIN"], "on": ["HBO Max"], "service": true, "from": "2026-01-01", "conf": "high",
+      "src": "https://www.ufc.com/news/how-watch-and-stream-ufc"},
+     {"segments": ["PRELIMS"], "on": ["discovery+"], "service": true, "from": "2026-01-01", "conf": "high",
+      "src": "https://www.ufc.com/news/how-watch-and-stream-ufc"},
+     {"segments": ["EARLY"], "on": ["UFC Fight Pass"], "service": true, "from": "2026-01-01", "conf": "high",
+      "src": "https://www.ufc.com/news/how-watch-and-stream-ufc"}],
+    "FR": [
+     {"segments": ["MAIN", "PRELIMS"], "on": ["RMC Sport"], "from": "2026-01-01", "conf": "high",
+      "src": "https://www.ufc.com/news/how-watch-and-stream-ufc"},
+     {"segments": ["EARLY"], "on": ["UFC Fight Pass"], "service": true, "from": "2026-01-01", "conf": "high",
+      "src": "https://www.ufc.com/news/how-watch-and-stream-ufc"}]}}}}

@@ -14,6 +14,10 @@ import java.util.List;
  *
  * Row 1 keeps a club's latest result for a week (the references list a four-day-old derby next to Tuesday's game;
  * SPEC-APP's "48 h" would drop it), and a club playing now is represented by its live card alone.
+ *
+ * A followed sport (F1, UFC) has a row of its own after the clubs' (SPEC-F1-UFC §9.2): its last result, the live or
+ * next session or event, then the weekend's remaining sessions or the next events. Its cards are items with an EventRef
+ * (club and m null). It joins row 1 only while it is live (F1-UFC-ARCHITECTURE §9.6).
  */
 final class MatchdayModel {
     private MatchdayModel() { }
@@ -26,35 +30,67 @@ final class MatchdayModel {
     static final int ROW1 = 5;
     static final String FIRST = "next";
 
-    /** One card: a club's match, seen from that club's side. */
+    /** One card: a club's match, seen from that club's side; or (ev set, club and m null) a sport's session or event. */
     static final class Item {
         final HomeModel.ClubData club;
         final Match m;
+        /** A sport's card (F1 session, UFC event); null for a club's match. */
+        final EventRef ev;
         /** The club's next match (the stage says "Up next"; later ones say "Later"). */
         boolean next;
 
-        Item(HomeModel.ClubData club, Match m) { this.club = club; this.m = m; }
+        Item(HomeModel.ClubData club, Match m) { this.club = club; this.m = m; this.ev = null; }
 
-        /** Stable across loads: the club and the match. */
-        String key() { return club.club.id + "|" + m.key; }
-        boolean result() { return "post".equals(m.state); }
-        boolean live() { return "in".equals(m.state); }
-        boolean off() { return "off".equals(m.state); }
-        HomeModel.Kind kind() { return HomeModel.kind(m); }
+        Item(EventRef ev) { this.club = null; this.m = null; this.ev = ev; }
+
+        /** Stable across loads: the club and the match (a sport's: its session key). */
+        String key() { return ev != null ? ev.key() : club.club.id + "|" + m.key; }
+        boolean result() { return ev != null ? ev.kind() == HomeModel.Kind.RESULT : "post".equals(m.state); }
+        boolean live() { return ev != null ? ev.kind() == HomeModel.Kind.LIVE : "in".equals(m.state); }
+        boolean off() { return ev != null ? ev.kind() == HomeModel.Kind.OFF : "off".equals(m.state); }
+        HomeModel.Kind kind() { return ev != null ? ev.kind() : HomeModel.kind(m); }
+        /** When it starts (a session's start; UFC: its card segment's). */
+        long start() { return ev != null ? ev.start() : m.start; }
+        /** The stage it wears: the club's id, or the sport's ("sport:f1"). */
+        String stageId() { return ev != null ? ev.sport.id() : club.club.id; }
     }
 
-    /** A row of cards: row 1 (club null) or one club's. */
+    /** A sport's card on a Matchday row: the event, the session (or segment) it is about, whether it is a result. */
+    static final class EventRef {
+        final SportModel.SportData sport;
+        final SportEvent e;
+        final String sessionId;
+        final boolean last;
+        /** The sport's next card ("Up next"; later ones "Later"). */
+        boolean next;
+
+        EventRef(SportModel.SportData sport, SportEvent e, String sessionId, boolean last) {
+            this.sport = sport; this.e = e; this.sessionId = sessionId; this.last = last;
+        }
+
+        String key() { return sport.id() + "|" + SportModel.key(SportModel.pick(e, sessionId, last)); }
+        SportEvent.Session session() { return e.session(sessionId); }
+        HomeModel.Kind kind() { return SportModel.kind(SportModel.pick(e, sessionId, last)); }
+        long start() { SportEvent.Session s = session(); return s != null ? s.start : e.start; }
+        EventCards.Pick pick() { return SportModel.pick(e, sessionId, last); }
+    }
+
+    /** A row of cards: row 1 (club and sport null), one club's, or one sport's. */
     static final class Row {
-        /** "next" for row 1, else the club's id. */
+        /** "next" for row 1, else the club's id, or the sport's ("sport:f1"). */
         final String id;
         final HomeModel.ClubData club;
+        /** A sport's row (club null). */
+        final SportModel.SportData sport;
         final List<Item> items = new ArrayList<>();
         /** The card the row opens on: the next match (results stay to its left). */
         int start;
         /** Still loading: grey card slots. */
         boolean loading;
 
-        Row(String id, HomeModel.ClubData club) { this.id = id; this.club = club; }
+        Row(String id, HomeModel.ClubData club) { this(id, club, null); }
+
+        Row(String id, HomeModel.ClubData club, SportModel.SportData sport) { this.id = id; this.club = club; this.sport = sport; }
 
         int indexOf(String itemKey) {
             for (int i = 0; i < items.size(); i++) if (items.get(i).key().equals(itemKey)) return i;
@@ -69,15 +105,74 @@ final class MatchdayModel {
         }
     }
 
-    /** Every row, row 1 first (none without clubs). */
+    /** Every row, row 1 first, then the clubs', then the sports' (none when nothing is followed). */
     static List<Row> rows(HomeModel h) {
         List<Row> out = new ArrayList<>();
         if (h.empty()) return out;
         List<Row> clubs = new ArrayList<>();
         for (HomeModel.ClubData d : h.clubs) clubs.add(club(d, h.all, h.teams(d), h.now));
-        out.add(first(h, clubs));
+        List<Row> sports = new ArrayList<>();
+        for (SportModel.SportData d : h.sports) sports.add(sport(d));
+        Row first = first(h, clubs, sports);
+        if (!h.clubs.isEmpty() || !first.items.isEmpty()) out.add(first);  // sports alone: row 1 only while one is live
         out.addAll(clubs);
+        out.addAll(sports);
         return out;
+    }
+
+    /**
+     * A sport's row: its latest results (oldest first), then the hero (live or next), then what comes after it: the
+     * weekend's remaining sessions and the next weekend's (F1), or the next events (UFC). Opens on the hero. The coming
+     * cards start at the hero's weekend's first unfinished session; past COMING, the later weekends are cut.
+     */
+    static Row sport(SportModel.SportData d) {
+        Row r = new Row(d.id(), null, d);
+        if (d.kind == HomeModel.Kind.LOADING) { r.loading = true; return r; }
+        List<EventCards.Pick> results = new ArrayList<>(d.latest);
+        if (d.hero != null && d.hero.last) results.add(d.hero);
+        Collections.sort(results, new Comparator<EventCards.Pick>() {
+            public int compare(EventCards.Pick a, EventCards.Pick b) { return Long.compare(startOf(a), startOf(b)); }
+        });
+        while (results.size() > RESULTS) results.remove(0);
+        for (EventCards.Pick p : results) r.items.add(new Item(new EventRef(d, p.e, p.sessionId, true)));
+        List<EventCards.Pick> coming = new ArrayList<>();
+        EventCards.Pick hero = d.hero != null && !d.hero.last ? d.hero : null;
+        String heroKey = hero == null ? "" : SportModel.key(hero);
+        if (SportEvent.F1.equals(d.sport)) {  // the weekend's sessions in their order (the race last), opening on the hero
+            boolean has = false;
+            for (EventCards.Pick p : d.upcoming) { coming.add(p); has |= SportModel.key(p).equals(heroKey); }
+            if (hero != null && !has) coming.add(hero);
+            Collections.sort(coming, new Comparator<EventCards.Pick>() {
+                public int compare(EventCards.Pick a, EventCards.Pick b) { return Long.compare(startOf(a), startOf(b)); }
+            });
+        } else {  // UFC: this card, then the next events (not this card's segments)
+            if (hero != null) coming.add(hero);
+            java.util.Set<SportEvent> events = new java.util.HashSet<>();
+            if (d.hero != null) events.add(d.hero.e);
+            for (EventCards.Pick p : d.upcoming) if (events.add(p.e)) coming.add(p);
+        }
+        int at = 0;
+        for (int i = 0; i < coming.size(); i++) if (SportModel.key(coming.get(i)).equals(heroKey)) at = i;
+        // QAS-1: the window opens on the hero's weekend's first session still to come (the race as hero keeps FP1 and
+        // FP2 before it), and the next weekend is what gets trimmed
+        int from = at;
+        while (hero != null && from > 0 && coming.get(from - 1).e == hero.e) from--;
+        coming = new ArrayList<>(coming.subList(from, Math.min(coming.size(), from + COMING)));
+        at -= from;
+        for (int i = 0; i < coming.size(); i++) {
+            EventCards.Pick p = coming.get(i);
+            EventRef ev = new EventRef(d, p.e, p.sessionId, false);
+            Item it = new Item(ev);
+            ev.next = it.next = i == at && hero != null && !it.live();
+            r.items.add(it);
+        }
+        r.start = coming.isEmpty() ? Math.max(0, r.items.size() - 1) : results.size() + at;
+        return r;
+    }
+
+    static long startOf(EventCards.Pick p) {
+        SportEvent.Session s = p.e.session(p.sessionId);
+        return s != null ? s.start : p.e.start;
     }
 
     /** One club's row: its latest results (oldest first), then the live or next match, then the later ones. */
@@ -117,7 +212,10 @@ final class MatchdayModel {
      * card only), then each club's latest result of the last week (newest first), then what comes after, soonest
      * first, until the row is full. A match between two followed clubs is listed once (the favourite's).
      */
-    static Row first(HomeModel h, List<Row> clubRows) {
+    static Row first(HomeModel h, List<Row> clubRows) { return first(h, clubRows, new ArrayList<Row>()); }
+
+    /** Row 1 with the sports' rows: a sport's card joins it only while it is live (F1-UFC-ARCHITECTURE §9.6). */
+    static Row first(HomeModel h, List<Row> clubRows, List<Row> sportRows) {
         Row r = new Row(FIRST, null);
         List<HomeModel.ClubData> order = new ArrayList<>(h.clubs);
         for (HomeModel.ClubData d : h.clubs) if (d.club.id.equals(h.favourite)) { order.remove(d); order.add(0, d); }
@@ -136,6 +234,7 @@ final class MatchdayModel {
             }
             if (newest != null && h.now - newest.m.start <= RECENT) latest.add(newest);
         }
+        for (Row sr : sportRows) for (Item it : sr.items) if (it.live()) live.add(it);
         Collections.sort(live, ITEM_KICKOFF);
         Collections.sort(next, ITEM_KICKOFF);
         Collections.sort(latest, Collections.reverseOrder(ITEM_KICKOFF));
@@ -152,7 +251,7 @@ final class MatchdayModel {
     }
 
     private static void add(List<Item> items, Item it) {
-        for (Item x : items) if (x.key().equals(it.key()) || same(x.m, it.m)) return;
+        for (Item x : items) if (x.key().equals(it.key()) || (x.m != null && it.m != null && same(x.m, it.m))) return;
         items.add(it);
     }
 
@@ -181,7 +280,7 @@ final class MatchdayModel {
         }
     };
     static final Comparator<Item> ITEM_KICKOFF = new Comparator<Item>() {
-        public int compare(Item a, Item b) { return Long.compare(a.m.start, b.m.start); }
+        public int compare(Item a, Item b) { return Long.compare(a.start(), b.start()); }
     };
 
     // ---------- focus ----------

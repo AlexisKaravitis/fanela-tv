@@ -1,6 +1,6 @@
 # Using Fanela
 
-This guide walks through Fanela 1.2.0 with the TV remote. If it isn't on your TV yet, start with the
+This guide walks through Fanela 1.3.0 with the TV remote. If it isn't on your TV yet, start with the
 [install guide](INSTALL.md).
 
 You only need four buttons: the arrows, **OK**, **Back** and **Home**.
@@ -123,8 +123,8 @@ is at the top right. Then press **OK**.
 
 ![Settings](screenshots/settings.png)
 
-- **Your clubs.** The same leagues and grid as the first start. Follow or unfollow clubs at any time. Changes are
-  saved straight away.
+- **Your clubs and sports.** The same leagues and grid as the first start, with Formula 1 and UFC at the end under
+  **More sports** (section 7). Follow or unfollow at any time. Changes are saved straight away.
 - **Language.** Switches between English and Greek. Club names switch too, in every league.
 - **Favourite club.** The club whose colours Fanela wears: the Matchday screen, the shirt in the logo, and the app's
   tile on the TV. Until you choose one, it's the first club you follow. The tile changes after you leave the app; on
@@ -169,13 +169,14 @@ Settings > Appearance changes how Fanela looks.
   stage, rows of cards below).
 - **Show scores on the home screen.** Turn it off to keep results off the home-screen cards and the titles the TV
   shows, for matches you'll watch later; the cards say LIVE or FINAL without the numbers. Fanela itself still shows
-  the scores. On TVs whose home screen doesn't show rows, this line says so instead.
+  the football and basketball scores; Formula 1 and UFC results stay hidden in the app too (section 7). On TVs whose
+  home screen doesn't show rows, this line says so instead.
 
 ## 6. Rows on the TV home screen
 
-On TVs with the classic Android TV home screen, Fanela can add one row per club to the home screen. Each row has the
-Fanela shirt in that club's colours at its side, and cards in your card style, drawn large enough to read from across
-the room. Resting on a card shows the match and where to watch it under the row.
+On TVs with the classic Android TV home screen, Fanela can add one row per club (and one per sport, section 7) to
+the home screen. Each club's row has the Fanela shirt in that club's colours at its side, and cards in your card
+style, drawn large enough to read from across the room. Resting on a card shows the match and where to watch it under the row.
 
 ![Fanela row on the home screen](screenshots/home-screen-row.png)
 
@@ -187,7 +188,45 @@ from the TV itself: Home > Customise channels.
 
 Google TV and most operator launchers don't show rows from apps. On those, open Fanela to see your fixtures.
 
-## 7. In Greek
+## 7. Formula 1 and UFC
+
+Fanela can follow Formula 1 and UFC next to your clubs. Football works as before until you follow one of them.
+
+**Following.** In Settings > Your clubs and sports, go right along the row of leagues to **More sports**, then pick
+**Formula 1** or **UFC** and press **OK** on its tile. Both have optional choices under the tile:
+
+- **Formula 1:** up to two drivers or teams. The cards then put your driver or team first, in the team's colour.
+- **UFC:** **All** events or **Numbered only** (UFC 334, UFC 335 …), and the fighters you follow, picked from the
+  next cards. A followed fighter's bout becomes the card's headline on any event.
+
+**Rows.** Each sport gets its own row on the TV's home screen, with the next session or fight card and the latest
+result. If the TV doesn't show the row, add it from Home > Customise channels.
+
+![Formula 1 and UFC rows on the home screen](screenshots/home-screen-sports.png)
+
+**In the app.** In the Club layout, Formula 1 and UFC sit in the rail after your clubs: the next session or main card
+at your time and where to watch it, the latest result and the standings, then the rest of the weekend or the next
+events. In Matchday each sport has its own row of cards. Press **OK** on either to open its screen:
+
+- **The race weekend:** the circuit, every session at your local time with where to watch it, and the drivers'
+  championship (**right** for the constructors', **left** to go back). After a session, its classification. **OK** on a
+  session opens the channel's app.
+
+  ![The race weekend screen](screenshots/f1-weekend.png)
+
+- **The fight card:** every bout from the main card down to the early prelims, with records, flags and the channel
+  for each part, and how each fight ended once it's over. To follow a fighter, hold **OK** on his bout, use **left**
+  or **right** to choose between the two, and press **OK**.
+
+  ![The fight card screen](screenshots/ufc-event.png)
+
+All five card styles draw Formula 1 and UFC. When **Show scores** is off (section 5), the results stay hidden in these
+screens too: no podium, winner, method or standings.
+
+While a session or a fight is live, Fanela says **LIVE** with the session or the bout on stage. The lap of a race and
+the round of a fight will follow in a later update.
+
+## 8. In Greek
 
 Everything, including team names, competitions and dates, switches to Greek when you choose Ελληνικά, and times are
 always on the 24-hour clock. Clubs from other leagues have their Greek names too ("Άρσεναλ", "Μπάγερν",
@@ -197,7 +236,7 @@ always on the 24-hour clock. Clubs from other leagues have their Greek names too
 
 ![The Bundesliga in Greek](screenshots/greek-clubs.png)
 
-## 8. Updating
+## 9. Updating
 
 Fanela doesn't update itself. When a new version is out, download its APK from the
 [Releases page](https://github.com/AlexisKaravitis/fanela-tv/releases) and install it the same way you installed the

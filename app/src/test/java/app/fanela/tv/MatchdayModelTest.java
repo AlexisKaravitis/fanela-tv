@@ -131,6 +131,32 @@ public class MatchdayModelTest {
         assertEquals("Full time", MatchdayModel.lead(oly.items.get(2)));
     }
 
+    @Test public void aUfcRowOrdersAsAClubRowItsResultsLeftOfTheNextEvent() {
+        long day = SportTestKit.DAY, now = SportTestKit.U334_EARLY - 2 * day;
+        SportEvent old = SportTestKit.ufc("1", "UFC Fight Night: Al vs. Bo", now - 20 * day),
+            last = SportTestKit.ufc("2", "UFC 333: Cy vs. Di", now - 6 * day),
+            next = SportTestKit.ufc334(),
+            fn1 = SportTestKit.ufc("4", "UFC Fight Night: Ed vs. Fy", SportTestKit.U334_EARLY + 7 * day),
+            fn2 = SportTestKit.ufc("5", "UFC Fight Night: Gu vs. Ha", SportTestKit.U334_EARLY + 14 * day),
+            n336 = SportTestKit.ufc("6", "UFC 336: Io vs. Ju", SportTestKit.U334_EARLY + 28 * day);
+        for (SportEvent e : new SportEvent[]{old, last}) {
+            e.state = "post";
+            for (SportEvent.Session x : e.sessions) { x.state = "post"; for (SportEvent.Bout b : x.bouts) { b.state = "post"; b.outcome = 1; b.method = "KO/TKO"; } }
+        }
+        List<SportEvent> all = new ArrayList<>();
+        for (SportEvent e : new SportEvent[]{old, last, next, fn1, fn2, n336}) all.add(e);
+        MatchdayModel.Row r = MatchdayModel.sport(SportModel.of(all, SportEvent.UFC, SportPrefs.none(), now));
+        // as a club row (aClubRowOpensOnItsNextMatchWithItsResultsToTheLeft): the latest results, oldest first, then
+        // the next event, which the row opens on, then the later ones
+        assertEquals(6, r.items.size());
+        assertTrue(r.items.get(0).ev.last); assertEquals(old, r.items.get(0).ev.e);
+        assertTrue(r.items.get(1).ev.last); assertEquals(last, r.items.get(1).ev.e);
+        assertEquals(next, r.items.get(2).ev.e);
+        assertTrue(r.items.get(2).next);
+        assertEquals(fn1, r.items.get(3).ev.e);
+        assertEquals("opens on the next event, the results one press left, as a club's", 2, r.start);
+    }
+
     @Test public void aClubWithoutFixturesOpensOnItsLastResultAndALoadingClubGreysRowOne() {
         long now = at(0, 18, 30);
         List<Match> all = new ArrayList<>();

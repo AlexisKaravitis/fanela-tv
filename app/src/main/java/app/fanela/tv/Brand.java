@@ -25,11 +25,15 @@ final class Brand {
     /** From an activity's onStart. */
     static void shown() { visible++; }
 
+    /** A Fanela screen is started (in front, or about to be). */
+    static boolean open() { return visible > 0; }
+
     /** From an activity's onStop: once no Fanela screen is left, the tile switches (after a moment, in case one opens). */
     static void hidden(Context c) {
         if (visible > 0) visible--;
         final Context app = c.getApplicationContext();
         MAIN.postDelayed(new Runnable() { public void run() { applyIfIdle(app); } }, 1500);
+        try { HomeRows.leftFront(app); } catch (Throwable ignored) { }  // retired rows go once the launcher is in front
     }
 
     /** Switches the tile now if no Fanela screen is open; otherwise it waits for hidden(). */

@@ -24,6 +24,9 @@ import java.util.Map;
  * clubs at the left (with each one's next kick-off, fresh result or live score), the hero with the selected club's
  * next match or its live strip, the latest results as objects, and the fixtures timetable with where to watch.
  * Behind the hero, the club's pre-rendered kit field; moving through the rail re-themes the screen (300 ms).
+ *
+ * Followed sports (F1, UFC) come after the clubs in the rail, each as its monogram disc (SPEC-F1-UFC §9.1); selecting
+ * one swaps the hero, latest tiles and fixtures for that sport's SportPanel, on the sport's own field.
  */
 final class ClubLayout implements HomeLayout {
     /** The images one club needs, made on the display thread (prepare). */
@@ -45,7 +48,10 @@ final class ClubLayout implements HomeLayout {
     private AppViews.Masthead mast;
     private ScrollView railScroll;
     private LinearLayout railList;
-    private final List<ClubViews.RailItem> rail = new ArrayList<>();
+    /** The rail's items: ClubViews.RailItem for the clubs, then SportViews.RailItem for the sports; tag = the id. */
+    private final List<AppViews.Cell> rail = new ArrayList<>();
+    /** The selected sport's hero, tiles and timetable (instead of content while a sport is selected). */
+    private SportPanel panel;
     private ClubViews.Gear gear;
     /**
      * An invisible focusable, the stage's first child: it holds the focus for a moment while the views that had it are
@@ -78,10 +84,13 @@ final class ClubLayout implements HomeLayout {
         AppArt.shirt(c, Ui.TXT);
         AppArt.shirt(c, FieldColors.INK_DARK);
         if (m.empty()) { KitField.get(c, "", null, null, false, KitField.Mode.NEUTRAL); return; }
-        String sel = selected != null && m.club(selected) != null ? selected : m.favourite;
+        String sel = selected != null && (m.club(selected) != null || m.sport(selected) != null) ? selected : m.favourite;
+        SportModel.SportData first = m.sport(sel);
+        if (first != null) first.art = SportPanel.prepare(c, first);  // the sport on screen first
         List<HomeModel.ClubData> order = new ArrayList<>(m.clubs);
         for (HomeModel.ClubData d : m.clubs) if (d.club.id.equals(sel)) { order.remove(d); order.add(0, d); }
         for (HomeModel.ClubData d : order) d.art = art(c, d, m);
+        for (SportModel.SportData d : m.sports) if (d != first) d.art = SportPanel.prepare(c, d);
     }
 
     /**
@@ -91,8 +100,13 @@ final class ClubLayout implements HomeLayout {
     @Override public void first(Context c, HomeModel m) {
         Ui.fonts(c);
         if (m.empty()) { KitField.get(c, "", null, null, false, KitField.Mode.NEUTRAL); return; }
-        String sel = selected != null && m.club(selected) != null ? selected : m.favourite;
-        if (m.club(sel) == null) sel = m.clubs.get(0).club.id;
+        String sel = selected != null && (m.club(selected) != null || m.sport(selected) != null) ? selected : m.favourite;
+        if (m.club(sel) == null && m.sport(sel) == null) sel = m.clubs.isEmpty() ? m.sports.get(0).id() : m.clubs.get(0).club.id;
+        for (SportModel.SportData d : m.sports) {  // a sport selected: its field (no outline yet) from the first frame
+            SportPanel.Art a = new SportPanel.Art();
+            if (d.id().equals(sel)) a.field = SportViews.field(c, d.sport, null, (int) KitField.HEIGHT);
+            d.art = a;
+        }
         for (HomeModel.ClubData d : m.clubs) {
             Art a = new Art();
             Teams.Club k = d.club;
@@ -209,6 +223,12 @@ final class ClubLayout implements HomeLayout {
         peek = new PeekFade(c);
         content.addView(peek, AppViews.at(c, 300, FADE_TOP, 1560, Ui.H - FADE_TOP));
 
+        panel = new SportPanel(c, new SportPanel.Host() {
+            public void openEvent(SportEvent e, String sessionId) { ClubLayout.this.host.openEvent(e, sessionId); }
+        });
+        panel.view().setVisibility(View.GONE);
+        stage.addView(panel.view(), new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
         emptyPanel = new EmptyPanel(c);
         stage.addView(emptyPanel, AppViews.at(c, 300, 112, 1524, 520));
         choose = new AppViews.Button(c, I18n.t("choose_clubs"));
@@ -233,12 +253,24 @@ final class ClubLayout implements HomeLayout {
         return d == null ? null : d.club;
     }
 
+    /** The selected club, or null while a sport is selected (or none is followed). */
     private HomeModel.ClubData data() {
-        if (model == null || model.empty()) return null;
+        if (model == null || model.empty() || sportData() != null) return null;
         HomeModel.ClubData d = selected == null ? null : model.club(selected);
         if (d == null) d = model.club(model.favourite);
-        return d != null ? d : model.clubs.get(0);
+        return d != null ? d : model.clubs.isEmpty() ? null : model.clubs.get(0);
     }
+
+    /** The selected sport (the only thing to select when no club is followed), or null. */
+    private SportModel.SportData sportData() {
+        if (model == null || model.empty()) return null;
+        SportModel.SportData s = model.sport(selected);
+        if (s == null && model.clubs.isEmpty()) s = model.sports.get(0);
+        return s;
+    }
+
+    /** The main column's first item: the club's hero, or the sport panel's. */
+    private View mainHero() { return sportData() != null ? panel.hero : hero; }
 
     // ---------- binding ----------
     @Override public void bind(HomeModel m) {
@@ -263,11 +295,12 @@ final class ClubLayout implements HomeLayout {
             placed = true;
             return;
         }
+        SportModel.SportData sd = sportData();
         HomeModel.ClubData d = data();
-        selected = d.club.id;
+        selected = sd != null ? sd.id() : d.club.id;
         rebuildRail(m);
-        bindMain(d);
-        if (!placed) { placed = true; if (!blocked) hero.requestFocus(); }
+        if (sd != null) bindSport(sd); else bindMain(d);
+        if (!placed) { placed = true; if (!blocked) mainHero().requestFocus(); }
         else if (!blocked && (stage.findFocus() == null || park.isFocused())) focus(was);
     }
 
@@ -287,14 +320,18 @@ final class ClubLayout implements HomeLayout {
     private void rebuildRail(HomeModel m) {
         StringBuilder key = new StringBuilder();
         for (HomeModel.ClubData d : m.clubs) key.append(',').append(d.club.id);
+        for (SportModel.SportData d : m.sports) key.append(',').append(d.id());
         if (!key.toString().equals(railKey)) {
             railKey = key.toString();
             if (!blocked && railList.hasFocus()) park.requestFocus();  // bind() puts it back on the same club, or the hero
             railList.removeAllViews();
             rail.clear();
-            for (final HomeModel.ClubData d : m.clubs) {
-                final ClubViews.RailItem it = new ClubViews.RailItem(c);
-                it.setTag(d.club.id);
+            List<String> ids = new ArrayList<>();
+            for (HomeModel.ClubData d : m.clubs) ids.add(d.club.id);
+            for (SportModel.SportData d : m.sports) ids.add(d.id());
+            for (String id : ids) {
+                final AppViews.Cell it = SportModel.sportOf(id) != null ? new SportViews.RailItem(c) : new ClubViews.RailItem(c);
+                it.setTag(id);
                 it.setOnFocusChangeListener(new View.OnFocusChangeListener() {
                     public void onFocusChange(View v, boolean has) {
                         if (!has) return;
@@ -310,25 +347,59 @@ final class ClubLayout implements HomeLayout {
         FieldColors fc = shown == null ? null : shown.colors;
         boolean liveEnv = shown != null && shown.kind == HomeModel.Kind.LIVE;
         float top = 130 - railScroll.getScrollY() / Ui.scale(c);
-        for (ClubViews.RailItem it : rail) {
-            HomeModel.ClubData d = m.club((String) it.getTag());
-            if (d == null) continue;
-            boolean sel = d.club.id.equals(selected);
-            float h = ClubViews.RailItem.height(sel, !d.rail.isEmpty() || d.kind == HomeModel.Kind.LOADING);  // loading: its line's room kept
-            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) it.getLayoutParams();
-            if (lp.height != Ui.px(c, h)) { lp.height = Ui.px(c, h); it.setLayoutParams(lp); }
-            Art a = (Art) d.art;
+        for (AppViews.Cell cell : rail) {
+            String id = (String) cell.getTag();
+            boolean sel = id.equals(selected);
+            HomeModel.ClubData d = m.club(id);
+            SportModel.SportData sd = m.sport(id);
+            if (d == null && sd == null) continue;
+            boolean sub = d != null ? !d.rail.isEmpty() || d.kind == HomeModel.Kind.LOADING : !sd.railLine.isEmpty() || sd.kind == HomeModel.Kind.LOADING;
+            float h = ClubViews.RailItem.height(sel, sub);  // loading: its line's room kept
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) cell.getLayoutParams();
+            if (lp.height != Ui.px(c, h)) { lp.height = Ui.px(c, h); cell.setLayoutParams(lp); }
             float mid = top + (sel ? 74 : 52);
             int ink = fc == null || liveEnv ? Ui.TXT : fc.inkAt(mid);
-            it.bind(d, sel, a == null ? null : a.railBig, a == null ? null : a.railSmall, ink, fc != null && !liveEnv && fc.lightAt(mid));
+            if (d != null && cell instanceof ClubViews.RailItem) {
+                Art a = d.art instanceof Art ? (Art) d.art : null;
+                ((ClubViews.RailItem) cell).bind(d, sel, a == null ? null : a.railBig, a == null ? null : a.railSmall, ink, fc != null && !liveEnv && fc.lightAt(mid));
+            } else if (sd != null && cell instanceof SportViews.RailItem) {
+                ((SportViews.RailItem) cell).bind(sd, sel, ink);
+                cell.onLight = false;
+            }
             top += h;
         }
         gear.ink = Ui.TXT;
         gear.invalidate();
     }
 
+    /** A sport selected: its panel over the sport's field, the masthead in white. */
+    private void bindSport(SportModel.SportData d) {
+        String refocus = null;
+        if (content.getVisibility() == View.VISIBLE && content.hasFocus() && !blocked) { refocus = "sp:hero"; park.requestFocus(); }
+        content.setVisibility(View.GONE);
+        panel.view().setVisibility(View.VISIBLE);
+        SportPanel.Art a = d.art instanceof SportPanel.Art ? (SportPanel.Art) d.art : new SportPanel.Art();
+        if (a.field == null) a.field = SportViews.cachedField(SportViews.fieldKey(d.sport, null, (int) KitField.HEIGHT));
+        setField(a.field, true);
+        mast.shirt = AppArt.shirt(c, Ui.TXT);
+        mast.ink = Ui.TXT;
+        mast.statusInk = Ui.TXT;
+        mast.set(model.status, model.statusText);
+        mast.invalidate();
+        String was = panel.owns(stage.findFocus()) ? panel.focusKey(stage.findFocus()) : null;
+        if (was != null && !blocked) { refocus = was; park.requestFocus(); }  // its views may be replaced
+        panel.bind(d, model.now);
+        pulse(d.kind == HomeModel.Kind.LOADING);
+        if (refocus != null && !blocked && park.isFocused()) panel.focus(refocus);
+    }
+
     private void bindMain(HomeModel.ClubData d) {
         String refocus = null;  // the focus parked while its view is replaced: put back once the new views are bound
+        if (panel.view().getVisibility() == View.VISIBLE) {
+            if (panel.view().hasFocus() && !blocked) { refocus = "hero"; park.requestFocus(); }
+            panel.view().setVisibility(View.GONE);
+            content.setVisibility(View.VISIBLE);
+        }
         Art a = d.art instanceof Art ? (Art) d.art : new Art();
         FieldColors fc = d.colors;
         boolean liveEnv = d.kind == HomeModel.Kind.LIVE;
@@ -431,6 +502,7 @@ final class ClubLayout implements HomeLayout {
                 hero.pulse = v; hero.invalidate();
                 for (ClubViews.ResultTile t : tiles) { t.pulse = v; t.invalidate(); }
                 for (ClubViews.FixtureRow r : rows) { r.pulse = v; r.invalidate(); }
+                if (panel != null && panel.view().getVisibility() == View.VISIBLE) panel.pulse(v);
             }
         });
         pulse.start();
@@ -446,7 +518,8 @@ final class ClubLayout implements HomeLayout {
         selected = id;
         lastMain = null;
         final HomeModel.ClubData d = model.club(id);
-        if (d == null) return;
+        final SportModel.SportData sd = model.sport(id);
+        if (d == null && sd == null) return;
         if (swap != null) swap.cancel();
         swap = ValueAnimator.ofFloat(0, 1);
         swap.setDuration(Ui.SWITCH_MS);
@@ -454,16 +527,17 @@ final class ClubLayout implements HomeLayout {
             boolean swapped;
             public void onAnimationUpdate(ValueAnimator a) {
                 float t = a.getAnimatedFraction() * Ui.SWITCH_MS;
-                if (t < Ui.SWAP_MS) content.setAlpha(1 - t / Ui.SWAP_MS);
+                if (t < Ui.SWAP_MS) { content.setAlpha(1 - t / Ui.SWAP_MS); panel.view().setAlpha(1 - t / Ui.SWAP_MS); }
                 else {
                     if (!swapped) {
                         swapped = true;
                         rowsKey = "";
-                        bindMain(d);
+                        if (sd != null) { bindSport(sd); panel.scrollTop(); } else bindMain(d);
                         rebuildRail(model);
                         listScroll.scrollTo(0, 0);
                     }
                     content.setAlpha(Math.min(1, (t - Ui.SWAP_MS) / (Ui.SWITCH_MS - Ui.SWAP_MS)));
+                    panel.view().setAlpha(content.getAlpha());
                 }
             }
         });
@@ -474,26 +548,28 @@ final class ClubLayout implements HomeLayout {
     @Override public String focusKey() {
         View f = stage == null ? null : stage.findFocus();
         if (f == null || f == park) return null;
+        if (panel != null && panel.owns(f)) return panel.focusKey(f);
         if (f == hero) return "hero";
         if (f == gear) return "gear";
         if (f == choose) return "choose";
         for (ClubViews.ResultTile t : tiles) if (f == t && t.m != null) return "tile:" + t.m.key;
         for (ClubViews.FixtureRow r : rows) if (f == r && r.m != null) return "row:" + r.m.key;
-        if (f instanceof ClubViews.RailItem) return "rail:" + f.getTag();
+        if (rail.contains(f)) return "rail:" + f.getTag();
         return null;
     }
 
     @Override public void focus(String key) {
         if (blocked) return;
         if (empty) { (key != null && key.equals("gear") ? gear : choose).requestFocus(); return; }
-        if (key == null) { hero.requestFocus(); return; }
+        if (key == null) { mainHero().requestFocus(); return; }
         if (key.equals("gear")) { gear.requestFocus(); return; }
         if (key.startsWith("rail:")) {
-            for (ClubViews.RailItem it : rail) if (key.substring(5).equals(it.getTag())) { it.requestFocus(); return; }
+            for (AppViews.Cell it : rail) if (key.substring(5).equals(it.getTag())) { it.requestFocus(); return; }
         }
+        if (sportData() != null) { panel.focus(key); return; }
         if (key.startsWith("tile:")) for (ClubViews.ResultTile t : tiles) if (t.m != null && key.substring(5).equals(t.m.key) && t.getVisibility() == View.VISIBLE) { t.requestFocus(); return; }
         if (key.startsWith("row:")) for (ClubViews.FixtureRow r : rows) if (r.m != null && key.substring(4).equals(r.m.key)) { r.requestFocus(); return; }
-        hero.requestFocus();
+        mainHero().requestFocus();
     }
 
     @Override public void block(boolean b) {
@@ -513,8 +589,8 @@ final class ClubLayout implements HomeLayout {
         return out;
     }
 
-    private ClubViews.RailItem railSelected() {
-        for (ClubViews.RailItem it : rail) if (it.getTag().equals(selected)) return it;
+    private AppViews.Cell railSelected() {
+        for (AppViews.Cell it : rail) if (it.getTag().equals(selected)) return it;
         return rail.isEmpty() ? null : rail.get(0);
     }
 
@@ -550,8 +626,8 @@ final class ClubLayout implements HomeLayout {
         }
         List<ClubViews.ResultTile> ts = shownTiles();
         List<ClubViews.FixtureRow> rs = shownRows();
-        if (f == null || f == park) return hero;
-        if (f instanceof ClubViews.RailItem || f == gear) {
+        if (f == null || f == park) return mainHero();
+        if (rail.contains(f) || f == gear) {
             int i = rail.indexOf(f);
             if (up) return f == gear ? (rail.isEmpty() ? null : rail.get(rail.size() - 1)) : i > 0 ? rail.get(i - 1) : null;
             if (down) return f == gear ? null : i < rail.size() - 1 ? rail.get(i + 1) : gear;
@@ -559,12 +635,13 @@ final class ClubLayout implements HomeLayout {
                 String k = lastMain;
                 lastMain = null;
                 if (k != null) { focus(k); return null; }
-                return hero;
+                return mainHero();
             }
             return null;
         }
         // the main column
         lastMain = focusKey();
+        if (panel.owns(f)) return panel.move(f, code, railSelected());
         if (left) {
             int ti = ts.indexOf(f);
             if (ti > 0) return ts.get(ti - 1);
@@ -651,6 +728,7 @@ final class ClubLayout implements HomeLayout {
         if (scrollAnim != null) scrollAnim.cancel();
         if (swap != null) swap.cancel();
         field.release();
+        if (panel != null) panel.release();
     }
 
     // ---------- small views ----------

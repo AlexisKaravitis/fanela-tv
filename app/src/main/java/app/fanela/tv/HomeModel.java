@@ -23,13 +23,23 @@ final class HomeModel {
     /** The status slot's text: the clock, "Updating…", or the offline sentence. */
     String statusText = "";
     final List<ClubData> clubs = new ArrayList<>();
+    /** The followed sports (F1, UFC), after the clubs (F1-UFC-ARCHITECTURE §7); empty when none is followed. */
+    final List<SportModel.SportData> sports = new ArrayList<>();
     /** The club the app wears when nothing else is chosen. */
     String favourite;
 
-    boolean empty() { return clubs.isEmpty(); }
+    /** Nothing followed: no club and no sport (a viewer who follows only F1 does not see the empty state). */
+    boolean empty() { return clubs.isEmpty() && sports.isEmpty(); }
 
     ClubData club(String id) {
         for (ClubData d : clubs) if (d.club.id.equals(id)) return d;
+        return null;
+    }
+
+    /** A followed sport by its id ("sport:f1"), or null. */
+    SportModel.SportData sport(String id) {
+        if (id == null) return null;
+        for (SportModel.SportData d : sports) if (d.id().equals(id)) return d;
         return null;
     }
 
@@ -237,6 +247,7 @@ final class HomeModel {
 
     /** One sentence a screen reader says for a match. */
     static String speak(Match m, Kind k, long now) {
+        if (m == null) return "";  // a sport's card on a Matchday row: its own words are set after (SportText.speak)
         StringBuilder b = new StringBuilder();
         if (k == Kind.LIVE) b.append(I18n.t("live")).append(". ");
         b.append(k == Kind.LIVE || k == Kind.RESULT ? m.scoreLine() : m.title()).append(". ").append(I18n.comp(m.comp));
